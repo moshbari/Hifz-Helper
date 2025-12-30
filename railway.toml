@@ -1,0 +1,13 @@
+# Railway will use this file for deployment configuration
+# See: https://docs.railway.app/deploy/config-as-code
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+
+[[services]]
+name = "hifz-helper"
