@@ -23,7 +23,7 @@ const PORT = process.env.PORT || 3001;
 
 // Security middleware
 app.use(helmet({
-  contentSecurityPolicy: false, // Disable for development
+  contentSecurityPolicy: false,
 }));
 
 // CORS configuration
@@ -32,11 +32,15 @@ app.use(cors({
   credentials: true,
 }));
 
-// Rate limiting
+// Trust proxy for Railway
+app.set('trust proxy', 1);
+
+// Rate limiting with proxy fix
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: { error: 'Too many requests, please try again later.' }
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests, please try again later.' },
+  validate: { xForwardedForHeader: false }
 });
 app.use('/api/', limiter);
 
