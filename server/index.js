@@ -73,12 +73,11 @@ if (process.env.NODE_ENV === 'production') {
 app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    error: err.message || 'Internal server error'
   });
 });
 
-app.listen(PORT, () => {
-  console.log('🚀 Server running on port ${PORT}');
-console.log('📖 Hifz Helper API ready');
+app.listen(PORT, function() {
+  console.log('Server running on port ' + PORT);
+  console.log('Hifz Helper API ready');
 });
