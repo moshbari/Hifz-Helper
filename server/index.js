@@ -21,6 +21,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust proxy for Railway (MUST be before other middleware)
+app.set('trust proxy', 1);
+
+// Health check FIRST - before any other middleware
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -28,14 +36,11 @@ app.use(helmet({
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: process.env.CLIENT_URL || '*',
   credentials: true,
 }));
 
-// Trust proxy for Railway
-app.set('trust proxy', 1);
-
-// Rate limiting with proxy fix
+// Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -48,11 +53,6 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/transcribe', transcribeRoutes);
@@ -62,10 +62,12 @@ app.use('/api/attempts', attemptsRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/dist')));
+  const clientPath = path.join(__dirname, '../client/dist');
+  app.use(express.static(clientPath));
   
+  // Handle client-side routing - serve index.html for non-API routes
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+    res.sendFile(path.join(clientPath, 'index.html'));
   });
 }
 
@@ -77,7 +79,17 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, function() {
+// Start server and keep it alive
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('Server running on port ' + PORT);
   console.log('Hifz Helper API ready');
+});
+
+// Handle shutdown gracefully
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });
