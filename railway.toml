@@ -3,7 +3,3 @@ builder = "nixpacks"
 
 [deploy]
 startCommand = "cd server && npm start"
-healthcheckPath = "/health"
-healthcheckTimeout = 300
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
