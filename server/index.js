@@ -79,6 +79,6 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📖 Hifz Helper API ready`);
+  console.log('🚀 Server running on port ${PORT}');
+console.log('📖 Hifz Helper API ready');
 });
