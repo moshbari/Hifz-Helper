@@ -1,13 +1,8 @@
-# Nixpacks configuration for Railway
 [phases.setup]
 nixPkgs = ["nodejs_20"]
 
 [phases.install]
-cmds = [
-  "npm install",
-  "cd server && npm install",
-  "cd ../client && npm install"
-]
+cmds = ["npm install && cd server && npm install && cd ../client && npm install"]
 
 [phases.build]
 cmds = ["cd client && npm run build"]
