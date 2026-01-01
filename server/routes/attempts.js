@@ -74,20 +74,21 @@ router.post('/', requireAuth, async (req, res) => {
     } = req.body;
 
     const attempt = {
-      user_id: userId,
-      surah_number: surahNumber,
-      surah_name: surahName,
-      verse_start: verseStart,
-      verse_end: verseEnd,
-      transcription,
-      original_text: originalText,
-      accuracy,
-      word_results: wordResults,
-      errors,
-      duration,
-      status: status || (accuracy >= 85 ? 'passed' : 'needs_review'),
-      created_at: new Date().toISOString(),
-    };
+  user_id: userId,
+  surah_number: surahNumber,
+  surah_name: surahName,
+  verse_start: verseStart,
+  verse_end: verseEnd,
+  transcription,
+  original_text: originalText,
+  accuracy,
+  word_results: wordResults,
+  errors,
+  duration,
+  status: status || (accuracy >= 85 ? 'passed' : 'needs_review'),
+  audio_key: req.body.audioKey || null,
+  created_at: new Date().toISOString(),
+};
 
     if (isSupabaseConfigured()) {
       const { data, error } = await supabase
