@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
-import { attemptsApi } from '../services/api';
+import { attemptsApi, audioApi, transcribeApi } from '../services/api';
 import { QuranQuoteCard } from '../components/QuranQuote';
 import {
   ArrowLeft,
@@ -15,6 +15,11 @@ import {
   Settings,
   Star,
   Award,
+  Play,
+  Pause,
+  RefreshCw,
+  Volume2,
+  Loader2,
 } from 'lucide-react';
 
 // Islamic encouraging messages based on accuracy
@@ -239,8 +244,15 @@ function AttemptCard({ attempt, onDelete, onClick }) {
 }
 
 // Attempt Detail Modal
-function AttemptDetailModal({ attempt, onClose }) {
+function AttemptDetailModal({ attempt, onClose, onTranscriptionUpdate }) {
   const { theme } = useTheme();
+  const audioRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [loadingAudio, setLoadingAudio] = useState(false);
+  const [reTranscribing, setReTranscribing] = useState(false);
+  const [newTranscription, setNewTranscription] = useState(null);
+  
   const islamicMessage = getIslamicMessage(attempt.accuracy);
   const isPerfect = attempt.accuracy === 100;
 
@@ -262,6 +274,66 @@ function AttemptDetailModal({ attempt, onClose }) {
   } catch (e) {
     errors = [];
   }
+
+  // Load audio URL when modal opens
+  useEffect(() => {
+    if (attempt.audio_key) {
+      loadAudioUrl();
+    }
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, [attempt.audio_key]);
+
+  const loadAudioUrl = async () => {
+    if (!attempt.audio_key) return;
+    setLoadingAudio(true);
+    try {
+      const result = await audioApi.getAudioUrl(attempt.audio_key);
+      setAudioUrl(result.url);
+    } catch (err) {
+      console.error('Failed to load audio:', err);
+    } finally {
+      setLoadingAudio(false);
+    }
+  };
+
+  const togglePlayPause = () => {
+    if (!audioRef.current) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleAudioEnded = () => {
+    setIsPlaying(false);
+  };
+
+  const handleReTranscribe = async () => {
+    if (!audioUrl) return;
+    
+    setReTranscribing(true);
+    try {
+      // Fetch the audio blob from the URL
+      const response = await fetch(audioUrl);
+      const audioBlob = await response.blob();
+      
+      // Re-transcribe
+      const result = await transcribeApi.transcribe(audioBlob);
+      setNewTranscription(result.transcription);
+    } catch (err) {
+      console.error('Re-transcription failed:', err);
+      alert('Re-transcription failed: ' + err.message);
+    } finally {
+      setReTranscribing(false);
+    }
+  };
 
   return (
     <div
@@ -291,6 +363,90 @@ function AttemptDetailModal({ attempt, onClose }) {
           <p className={`font-medium ${theme.text} mb-1`}>{islamicMessage.title}</p>
           <p className={`text-sm ${theme.textMuted}`}>{islamicMessage.message}</p>
         </div>
+
+        {/* Audio Player Section */}
+        {attempt.audio_key && (
+          <div className={`${theme.bg} rounded-xl p-4 mb-4`}>
+            <div className="flex items-center justify-between mb-3">
+              <p className={`text-sm font-medium ${theme.textMuted} flex items-center gap-2`}>
+                <Volume2 className="w-4 h-4" />
+                Voice Recording
+              </p>
+              <span className={`text-xs ${theme.textMuted}`}>Saved for 7 days</span>
+            </div>
+            
+            {loadingAudio ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className={`w-6 h-6 ${theme.accent} spinner`} />
+              </div>
+            ) : audioUrl ? (
+              <>
+                <audio 
+                  ref={audioRef} 
+                  src={audioUrl} 
+                  onEnded={handleAudioEnded}
+                  className="hidden"
+                />
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={togglePlayPause}
+                    className={`w-12 h-12 rounded-full ${theme.primary} text-white flex items-center justify-center`}
+                  >
+                    {isPlaying ? (
+                      <Pause className="w-5 h-5" />
+                    ) : (
+                      <Play className="w-5 h-5 ml-1" />
+                    )}
+                  </button>
+                  <div className="flex-1">
+                    <p className={`text-sm ${theme.text}`}>
+                      {isPlaying ? 'Playing...' : 'Tap to play recording'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleReTranscribe}
+                    disabled={reTranscribing}
+                    className={`px-3 py-2 ${theme.card} ${theme.border} border rounded-lg text-sm ${theme.text} flex items-center gap-2 disabled:opacity-50`}
+                  >
+                    {reTranscribing ? (
+                      <Loader2 className="w-4 h-4 spinner" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    Re-transcribe
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className={`text-sm ${theme.textMuted} text-center py-2`}>
+                Audio not available
+              </p>
+            )}
+            
+            {/* New Transcription Result */}
+            {newTranscription && (
+              <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <p className={`text-sm font-medium text-blue-400 mb-2`}>New Transcription:</p>
+                <p className="arabic-text text-lg leading-relaxed text-blue-300" dir="rtl">
+                  {newTranscription}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* No Audio Available Notice */}
+        {!attempt.audio_key && (
+          <div className={`${theme.bg} rounded-xl p-4 mb-4 text-center`}>
+            <Volume2 className={`w-8 h-8 ${theme.textMuted} mx-auto mb-2 opacity-50`} />
+            <p className={`text-sm ${theme.textMuted}`}>
+              No voice recording available for this attempt
+            </p>
+            <p className={`text-xs ${theme.textMuted} mt-1`}>
+              Voice recording was added in a recent update
+            </p>
+          </div>
+        )}
 
         {/* Perfect Score Celebration */}
         {isPerfect && (

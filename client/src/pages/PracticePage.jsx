@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useRecording } from '../hooks/useRecording';
-import { quranApi, transcribeApi, verifyApi, attemptsApi } from '../services/api';
+import { quranApi, transcribeApi, verifyApi, attemptsApi, audioApi } from '../services/api';
 import { QuranQuoteCard } from '../components/QuranQuote';
 import {
   ArrowLeft,
@@ -235,10 +235,25 @@ export default function PracticePage() {
     try {
       const result = await verifyApi.verify(transcription, verseRange.combinedText, parseInt(surahNumber), verseRange);
       setVerificationResult(result.verification);
+      
+      // Upload audio to R2 storage
+      let audioKey = null;
+      if (audioBlob) {
+        try {
+          const audioResult = await audioApi.uploadAudio(audioBlob);
+          audioKey = audioResult.key;
+          console.log('Audio uploaded:', audioKey);
+        } catch (audioErr) {
+          console.error('Failed to upload audio (continuing without):', audioErr);
+        }
+      }
+      
+      // Save attempt with audio key
       await attemptsApi.saveAttempt({
         surahNumber: parseInt(surahNumber), surahName: surah.name, verseStart: verseRange.start, verseEnd: verseRange.end,
         transcription, originalText: verseRange.combinedText, accuracy: result.verification.overallAccuracy,
         wordResults: result.verification.wordByWord, errors: result.verification.errors, duration, status: result.verification.isCorrect ? 'passed' : 'needs_review',
+        audioKey, // Store the R2 audio key
       });
       setStep('result');
     } catch (err) { setError('Verification failed: ' + err.message); setStep('edit'); }
