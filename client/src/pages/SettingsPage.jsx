@@ -1,23 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useTheme, THEMES } from '../context/ThemeContext';
+import { useTheme } from '../context/ThemeContext';
+import { attemptsApi } from '../services/api';
 import {
-  BookOpen,
+  ArrowLeft,
   Clock,
+  CheckCircle,
+  AlertCircle,
+  Trash2,
+  ChevronRight,
+  Calendar,
+  BookOpen,
   Settings,
-  Palette,
-  LogOut,
-  User,
-  Lock,
-  Check,
-  X,
-  Loader2,
-  Eye,
-  EyeOff,
+  Star,
+  Award,
 } from 'lucide-react';
 
-// Bottom nav
+// Islamic encouraging messages based on accuracy
+const getIslamicMessage = (accuracy) => {
+  if (accuracy === 100) {
+    return {
+      title: "MashaAllah! 🌟",
+      message: "Perfect recitation! May Allah bless your memorization journey.",
+      icon: "🏆"
+    };
+  } else if (accuracy >= 95) {
+    return {
+      title: "Excellent! ⭐",
+      message: "SubhanAllah! You're so close to perfection. Keep going!",
+      icon: "🌟"
+    };
+  } else if (accuracy >= 90) {
+    return {
+      title: "Great Job!",
+      message: "MashaAllah! Your hard work is showing. A little more practice!",
+      icon: "✨"
+    };
+  } else if (accuracy >= 80) {
+    return {
+      title: "Well Done!",
+      message: "Alhamdulillah! You're making good progress. Keep practicing!",
+      icon: "💪"
+    };
+  } else if (accuracy >= 70) {
+    return {
+      title: "Good Effort!",
+      message: "Every ayah you learn brings you closer to Allah. Keep trying!",
+      icon: "📖"
+    };
+  } else if (accuracy >= 60) {
+    return {
+      title: "Keep Going!",
+      message: "The Prophet ﷺ said: 'The one who struggles with Quran gets double reward.'",
+      icon: "🤲"
+    };
+  } else {
+    return {
+      title: "Don't Give Up!",
+      message: "Allah rewards the effort, not just the result. Try again!",
+      icon: "💚"
+    };
+  }
+};
+
+// Bottom nav (shared component)
 function BottomNav({ active }) {
   const { theme } = useTheme();
   const navigate = useNavigate();
@@ -48,351 +94,378 @@ function BottomNav({ active }) {
   );
 }
 
-// Theme selector
-function ThemeSelector() {
-  const { theme, themeName, setTheme, themes } = useTheme();
+// Attempt card
+function AttemptCard({ attempt, onDelete, onClick }) {
+  const { theme } = useTheme();
+  const isPerfect = attempt.accuracy === 100;
+  const isPassed = attempt.status === 'passed' || attempt.accuracy >= 85;
 
-  const themeColors = {
-    ocean: 'bg-blue-600',
-    forest: 'bg-emerald-600',
-    royal: 'bg-purple-600',
-    sunset: 'bg-orange-600',
-    midnight: 'bg-indigo-600',
-    light: 'bg-slate-200',
-    cream: 'bg-amber-200',
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return `Today, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    } else {
+      return date.toLocaleDateString();
+    }
+  };
+
+  const getAccuracyColor = (accuracy) => {
+    if (accuracy === 100) return 'text-yellow-400';
+    if (accuracy >= 90) return 'text-emerald-400';
+    if (accuracy >= 70) return 'text-yellow-400';
+    return 'text-red-400';
   };
 
   return (
-    <div className={`${theme.card} rounded-xl p-4`}>
-      <div className="flex items-center gap-3 mb-4">
-        <Palette className={`w-5 h-5 ${theme.accent}`} />
-        <h3 className={`font-medium ${theme.text}`}>Theme</h3>
-      </div>
+    <div
+      className={`${theme.card} rounded-xl p-4 transition-colors cursor-pointer ${theme.cardHover} ${isPerfect ? 'ring-2 ring-yellow-400/50' : ''}`}
+      onClick={onClick}
+    >
+      <div className="flex items-start gap-3">
+        {/* Status Icon */}
+        <div
+          className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+            isPerfect ? 'bg-yellow-500/20' : isPassed ? 'bg-emerald-500/20' : 'bg-yellow-500/20'
+          }`}
+        >
+          {isPerfect ? (
+            <Award className="w-5 h-5 text-yellow-400" />
+          ) : isPassed ? (
+            <CheckCircle className="w-5 h-5 text-emerald-400" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-yellow-400" />
+          )}
+        </div>
 
-      <div className="grid grid-cols-4 gap-3">
-        {Object.entries(themes).map(([key, t]) => (
-          <button
-            key={key}
-            onClick={() => setTheme(key)}
-            className={`relative aspect-square rounded-xl ${themeColors[key]} flex items-center justify-center transition-transform hover:scale-105 ${
-              themeName === key ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''
-            }`}
-            title={t.name}
-          >
-            {themeName === key && (
-              <Check className="w-5 h-5 text-white drop-shadow" />
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <h3 className={`font-semibold ${theme.text}`}>{attempt.surah_name}</h3>
+            <div className="flex items-center gap-1">
+              {isPerfect && <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />}
+              <span className={`font-bold ${getAccuracyColor(attempt.accuracy)}`}>
+                {attempt.accuracy}%
+              </span>
+            </div>
+          </div>
+          <p className={`text-sm ${theme.textMuted}`}>
+            Verses {attempt.verse_start}-{attempt.verse_end}
+          </p>
+          <div className={`flex items-center gap-2 mt-1 text-xs ${theme.textMuted}`}>
+            <Calendar className="w-3 h-3" />
+            {formatDate(attempt.created_at)}
+            {attempt.duration && (
+              <>
+                <span>•</span>
+                <Clock className="w-3 h-3" />
+                {Math.floor(attempt.duration / 60)}:{(attempt.duration % 60).toString().padStart(2, '0')}
+              </>
             )}
-          </button>
-        ))}
-      </div>
+          </div>
+        </div>
 
-      <p className={`text-sm ${theme.textMuted} mt-3`}>
-        Current: {themes[themeName].name}
-      </p>
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(attempt.id);
+            }}
+            className={`p-2 ${theme.textMuted} hover:text-red-400 transition-colors`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <ChevronRight className={`w-5 h-5 ${theme.textMuted}`} />
+        </div>
+      </div>
     </div>
   );
 }
 
-// Change Password Modal
-function ChangePasswordModal({ onClose }) {
+// Attempt Detail Modal
+function AttemptDetailModal({ attempt, onClose }) {
   const { theme } = useTheme();
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const islamicMessage = getIslamicMessage(attempt.accuracy);
+  const isPerfect = attempt.accuracy === 100;
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+  const getAccuracyColor = (accuracy) => {
+    if (accuracy === 100) return 'text-yellow-400';
+    if (accuracy >= 90) return 'text-emerald-400';
+    if (accuracy >= 70) return 'text-yellow-400';
+    return 'text-red-400';
+  };
 
-    // Validation
-    if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters');
-      return;
+  // Parse errors if stored as string
+  let errors = [];
+  try {
+    if (typeof attempt.errors === 'string') {
+      errors = JSON.parse(attempt.errors);
+    } else if (Array.isArray(attempt.errors)) {
+      errors = attempt.errors;
     }
+  } catch (e) {
+    errors = [];
+  }
 
-    if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
-      return;
-    }
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className={`${theme.card} rounded-t-2xl sm:rounded-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-fade-in`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header with Score */}
+        <div className="text-center mb-6">
+          <div className={`text-5xl mb-2`}>{islamicMessage.icon}</div>
+          <div className={`text-4xl font-bold ${getAccuracyColor(attempt.accuracy)} mb-1`}>
+            {attempt.accuracy}%
+          </div>
+          <h3 className={`text-lg font-semibold ${theme.text}`}>
+            {attempt.surah_name}
+          </h3>
+          <p className={`text-sm ${theme.textMuted}`}>
+            Verses {attempt.verse_start}-{attempt.verse_end}
+          </p>
+        </div>
 
-    setLoading(true);
+        {/* Islamic Message */}
+        <div className={`${theme.bg} rounded-xl p-4 mb-4 text-center`}>
+          <p className={`font-medium ${theme.text} mb-1`}>{islamicMessage.title}</p>
+          <p className={`text-sm ${theme.textMuted}`}>{islamicMessage.message}</p>
+        </div>
 
+        {/* Perfect Score Celebration */}
+        {isPerfect && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-center">
+            <p className="text-yellow-400 font-medium">🎉 Perfect Recitation! 🎉</p>
+            <p className="text-yellow-400/70 text-sm mt-1">
+              You recited every word correctly. MashaAllah!
+            </p>
+          </div>
+        )}
+
+        {/* Original Text */}
+        {attempt.original_text && (
+          <div className="mb-4">
+            <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>Original Text</p>
+            <div className={`${theme.bg} p-3 rounded-lg arabic-text text-lg leading-relaxed`} dir="rtl">
+              {attempt.original_text}
+            </div>
+          </div>
+        )}
+
+        {/* Your Recitation */}
+        {attempt.transcription && (
+          <div className="mb-4">
+            <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>Your Recitation</p>
+            <div className={`${theme.bg} p-3 rounded-lg arabic-text text-lg leading-relaxed`} dir="rtl">
+              {attempt.transcription}
+            </div>
+          </div>
+        )}
+
+        {/* Mistakes Section */}
+        {errors && errors.length > 0 && (
+          <div className="mb-4">
+            <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>
+              Mistakes to Review ({errors.length})
+            </p>
+            <div className={`${theme.bg} rounded-lg p-3 space-y-3`}>
+              {errors.map((error, idx) => (
+                <div key={idx} className={`pb-3 ${idx < errors.length - 1 ? `border-b ${theme.border}` : ''}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-red-400 text-sm">You said:</span>
+                    <span className="arabic-text text-red-400" dir="rtl">
+                      {error.recited || error.word || '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 text-sm">Correct:</span>
+                    <span className="arabic-text text-emerald-400" dir="rtl">
+                      {error.original || error.correct || '—'}
+                    </span>
+                  </div>
+                  {error.suggestion && (
+                    <p className={`text-xs ${theme.textMuted} mt-1`}>💡 {error.suggestion}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* No Mistakes Message */}
+        {(!errors || errors.length === 0) && !isPerfect && (
+          <div className={`${theme.bg} rounded-lg p-4 mb-4 text-center`}>
+            <p className={theme.textMuted}>No specific mistakes recorded.</p>
+            <p className={`text-sm ${theme.textMuted} mt-1`}>Keep practicing to improve!</p>
+          </div>
+        )}
+
+        {/* Encouragement for non-perfect */}
+        {!isPerfect && (
+          <div className={`text-center ${theme.textMuted} text-sm mb-4`}>
+            <p>📿 "Whoever recites the Quran and masters it by heart, will be with the noble righteous scribes in Heaven."</p>
+            <p className="text-xs mt-1">— Prophet Muhammad ﷺ</p>
+          </div>
+        )}
+
+        <button
+          onClick={onClose}
+          className={`w-full py-3 ${theme.primary} text-white rounded-lg mt-4`}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function HistoryPage() {
+  const { theme } = useTheme();
+  const navigate = useNavigate();
+
+  const [attempts, setAttempts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState(null);
+  const [selectedAttempt, setSelectedAttempt] = useState(null);
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          currentPassword,
-          newPassword,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to change password');
-      }
-
-      setSuccess(true);
-      setTimeout(() => {
-        onClose();
-      }, 2000);
-    } catch (err) {
-      setError(err.message);
+      const [attemptsRes, statsRes] = await Promise.all([
+        attemptsApi.getAttempts(50),
+        attemptsApi.getStats(),
+      ]);
+      setAttempts(attemptsRes.attempts);
+      setStats(statsRes.stats);
+    } catch (error) {
+      console.error('Failed to load history:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className={`${theme.card} rounded-2xl w-full max-w-md p-6 animate-fade-in`}>
-        <div className="flex items-center justify-between mb-6">
-          <h3 className={`text-lg font-semibold ${theme.text}`}>Change Password</h3>
-          <button onClick={onClose} className={theme.textMuted}>
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this attempt?')) return;
 
-        {success ? (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Check className="w-8 h-8 text-emerald-400" />
-            </div>
-            <p className={`${theme.text} font-medium`}>Password Changed!</p>
-            <p className={`${theme.textMuted} text-sm mt-1`}>Your password has been updated successfully.</p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label className={`block text-sm ${theme.textMuted} mb-1`}>Current Password</label>
-              <div className="relative">
-                <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.textMuted}`} />
-                <input
-                  type={showCurrent ? 'text' : 'password'}
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className={`w-full pl-10 pr-10 py-3 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrent(!showCurrent)}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`}
-                >
-                  {showCurrent ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm ${theme.textMuted} mb-1`}>New Password</label>
-              <div className="relative">
-                <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.textMuted}`} />
-                <input
-                  type={showNew ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className={`w-full pl-10 pr-10 py-3 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  required
-                  minLength={6}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNew(!showNew)}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`}
-                >
-                  {showNew ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm ${theme.textMuted} mb-1`}>Confirm New Password</label>
-              <div className="relative">
-                <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.textMuted}`} />
-                <input
-                  type={showConfirm ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className={`w-full pl-10 pr-10 py-3 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm(!showConfirm)}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`}
-                >
-                  {showConfirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className={`flex-1 py-3 ${theme.card} ${theme.border} border rounded-lg ${theme.text}`}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className={`flex-1 py-3 ${theme.primary} text-white rounded-lg flex items-center justify-center gap-2 disabled:opacity-50`}
-              >
-                {loading ? <Loader2 className="w-5 h-5 spinner" /> : 'Update Password'}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Settings section
-function SettingsSection({ title, children }) {
-  const { theme } = useTheme();
-
-  return (
-    <div className="mb-6">
-      <h2 className={`text-sm font-medium ${theme.textMuted} mb-3 px-1`}>{title}</h2>
-      <div className="space-y-3">{children}</div>
-    </div>
-  );
-}
-
-// Settings row
-function SettingsRow({ icon: Icon, label, value, onClick, danger }) {
-  const { theme } = useTheme();
-
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full ${theme.card} rounded-xl p-4 flex items-center gap-3 transition-colors ${theme.cardHover}`}
-    >
-      <Icon className={`w-5 h-5 ${danger ? 'text-red-400' : theme.accent}`} />
-      <span className={`flex-1 text-left ${danger ? 'text-red-400' : theme.text}`}>{label}</span>
-      {value && <span className={theme.textMuted}>{value}</span>}
-    </button>
-  );
-}
-
-export default function SettingsPage() {
-  const { user, logout } = useAuth();
-  const { theme } = useTheme();
-  const navigate = useNavigate();
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-
-  const handleLogout = async () => {
-    if (confirm('Are you sure you want to sign out?')) {
-      await logout();
-      navigate('/login');
+    try {
+      await attemptsApi.deleteAttempt(id);
+      setAttempts((prev) => prev.filter((a) => a.id !== id));
+    } catch (error) {
+      console.error('Failed to delete attempt:', error);
     }
   };
 
-  const handleClearData = () => {
-    if (confirm('This will clear all local data including favorites. Continue?')) {
-      localStorage.removeItem('hifz-favorites');
-      localStorage.removeItem('hifz-theme');
-      window.location.reload();
+  // Group attempts by date
+  const groupedAttempts = attempts.reduce((groups, attempt) => {
+    const date = new Date(attempt.created_at).toDateString();
+    if (!groups[date]) {
+      groups[date] = [];
     }
-  };
+    groups[date].push(attempt);
+    return groups;
+  }, {});
+
+  // Count perfect scores
+  const perfectCount = attempts.filter(a => a.accuracy === 100).length;
 
   return (
     <div className={`min-h-screen ${theme.bg} pb-20`}>
       {/* Header */}
       <header className={`${theme.card} px-4 py-6 safe-top`}>
         <div className="max-w-lg mx-auto">
-          <h1 className={`text-xl font-bold ${theme.text}`}>Settings</h1>
+          <h1 className={`text-xl font-bold ${theme.text}`}>Practice History</h1>
+          
+          {stats && (
+            <div className="grid grid-cols-4 gap-4 mt-4">
+              <div className="text-center">
+                <p className={`text-2xl font-bold ${theme.text}`}>{stats.totalAttempts}</p>
+                <p className={`text-xs ${theme.textMuted}`}>Total</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-2xl font-bold text-emerald-400`}>{stats.passedCount}</p>
+                <p className={`text-xs ${theme.textMuted}`}>Passed</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-2xl font-bold ${theme.accent}`}>{stats.averageAccuracy}%</p>
+                <p className={`text-xs ${theme.textMuted}`}>Avg</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-2xl font-bold text-yellow-400`}>{perfectCount}</p>
+                <p className={`text-xs ${theme.textMuted}`}>Perfect</p>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
-      {/* Settings Content */}
+      {/* History List */}
       <main className="px-4 py-6 max-w-lg mx-auto">
-        {/* Profile Section */}
-        <SettingsSection title="Profile">
-          <div className={`${theme.card} rounded-xl p-4`}>
-            <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 ${theme.primary} rounded-full flex items-center justify-center`}>
-                <User className="w-7 h-7 text-white" />
-              </div>
-              <div className="flex-1">
-                <p className={`font-semibold ${theme.text}`}>
-                  {user?.user_metadata?.name || 'Student'}
-                </p>
-                <p className={`text-sm ${theme.textMuted}`}>{user?.email}</p>
-              </div>
-              <div className={`px-3 py-1 rounded-full text-xs ${theme.primary} text-white`}>
-                {user?.user_metadata?.role || 'Student'}
-              </div>
-            </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full spinner" />
           </div>
-        </SettingsSection>
-
-        {/* Appearance Section */}
-        <SettingsSection title="Appearance">
-          <ThemeSelector />
-        </SettingsSection>
-
-        {/* Security Section */}
-        <SettingsSection title="Security">
-          <SettingsRow
-            icon={Lock}
-            label="Change Password"
-            onClick={() => setShowPasswordModal(true)}
-          />
-        </SettingsSection>
-
-        {/* App Section */}
-        <SettingsSection title="App">
-          <SettingsRow
-            icon={Settings}
-            label="Clear Local Data"
-            onClick={handleClearData}
-          />
-        </SettingsSection>
-
-        {/* Account Section */}
-        <SettingsSection title="Account">
-          <SettingsRow
-            icon={LogOut}
-            label="Sign Out"
-            onClick={handleLogout}
-            danger
-          />
-        </SettingsSection>
-
-        {/* App Info */}
-        <div className={`text-center ${theme.textMuted} text-sm mt-8`}>
-          <p>Hifz Helper v1.0.0</p>
-          <p className="mt-1">Made with ❤️ for Quran memorization</p>
-        </div>
+        ) : attempts.length === 0 ? (
+          <div className={`text-center py-12 ${theme.textMuted}`}>
+            <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>No practice history yet</p>
+            <p className="text-sm mt-1">Start practicing to see your progress!</p>
+            <button
+              onClick={() => navigate('/')}
+              className={`mt-4 px-6 py-2 ${theme.primary} text-white rounded-lg`}
+            >
+              Start Practicing
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {Object.entries(groupedAttempts).map(([date, dateAttempts]) => (
+              <div key={date}>
+                <h2 className={`text-sm font-medium ${theme.textMuted} mb-3`}>
+                  {new Date(date).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </h2>
+                <div className="space-y-3">
+                  {dateAttempts.map((attempt) => (
+                    <AttemptCard
+                      key={attempt.id}
+                      attempt={attempt}
+                      onDelete={handleDelete}
+                      onClick={() => setSelectedAttempt(attempt)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
 
-      {/* Change Password Modal */}
-      {showPasswordModal && (
-        <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
+      {/* Attempt Detail Modal */}
+      {selectedAttempt && (
+        <AttemptDetailModal 
+          attempt={selectedAttempt} 
+          onClose={() => setSelectedAttempt(null)} 
+        />
       )}
 
-      <BottomNav active="settings" />
+      <BottomNav active="history" />
     </div>
   );
 }
