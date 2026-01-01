@@ -3,6 +3,8 @@ import express from 'express';
 import multer from 'multer';
 import { uploadAudio, getAudioUrl, deleteAudio, cleanupOldRecordings } from '../services/r2Storage.js';
 import { requireAuth } from '../middleware/auth.js';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import OpenAI from 'openai';
 
 const router = express.Router();
 
@@ -65,6 +67,66 @@ router.get('/:key(*)', requireAuth, async (req, res) => {
 });
 
 /**
+ * POST /api/audio/retranscribe
+ * Re-transcribe audio from R2
+ */
+router.post('/retranscribe', requireAuth, async (req, res) => {
+  try {
+    const { audioKey } = req.body;
+    
+    if (!audioKey) {
+      return res.status(400).json({ error: 'Audio key required' });
+    }
+
+    // Get the audio from R2
+    const r2Client = new S3Client({
+      region: 'auto',
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+    });
+
+    const command = new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME || 'hifz-recordings',
+      Key: audioKey,
+    });
+
+    const response = await r2Client.send(command);
+    const chunks = [];
+    for await (const chunk of response.Body) {
+      chunks.push(chunk);
+    }
+    const audioBuffer = Buffer.concat(chunks);
+    
+    // Send to OpenAI for transcription
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    
+    // Create a File-like object for OpenAI
+    const file = {
+      buffer: audioBuffer,
+      originalname: 'audio.webm',
+      mimetype: 'audio/webm',
+    };
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: new File([audioBuffer], 'audio.webm', { type: 'audio/webm' }),
+      model: 'whisper-1',
+      language: 'ar',
+    });
+
+    res.json({
+      success: true,
+      transcription: transcription.text,
+    });
+  } catch (error) {
+    console.error('Re-transcribe error:', error);
+    res.status(500).json({ error: 'Failed to re-transcribe audio' });
+  }
+});
+
+/**
  * DELETE /api/audio/:key
  * Delete audio recording
  */
@@ -87,7 +149,6 @@ router.delete('/:key(*)', requireAuth, async (req, res) => {
 /**
  * POST /api/audio/cleanup
  * Manually trigger cleanup of old recordings (admin only)
- * In production, run this as a scheduled cron job
  */
 router.post('/cleanup', requireAuth, async (req, res) => {
   try {
