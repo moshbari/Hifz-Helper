@@ -65,7 +65,7 @@ function VerseRangeModal({ surah, onSelect, onClose }) {
   );
 }
 
-function VerificationResult({ result, onRetry, onDone }) {
+function VerificationResult({ result, verses, onRetry, onDone }) {
   const { theme } = useTheme();
   const getAccuracyColor = (accuracy) => { if (accuracy >= 90) return 'text-emerald-400'; if (accuracy >= 70) return 'text-yellow-400'; return 'text-red-400'; };
   return (
@@ -74,6 +74,17 @@ function VerificationResult({ result, onRetry, onDone }) {
         <div className={`text-5xl font-bold ${getAccuracyColor(result.overallAccuracy)} mb-2`}>{result.overallAccuracy}%</div>
         <p className={theme.textMuted}>{result.isCorrect ? '✓ Excellent recitation!' : 'Keep practicing!'}</p>
       </div>
+      
+      {/* Show original verses only in results */}
+      {verses && verses.length > 0 && (
+        <div className={`${theme.card} rounded-2xl p-4 mb-4`}>
+          <h4 className={`font-medium ${theme.text} mb-3`}>Original Verses:</h4>
+          <div className="arabic-text text-xl leading-loose" dir="rtl">
+            {verses.map((verse) => (<span key={verse.number}>{verse.text}<span className="verse-separator"> ۝ </span></span>))}
+          </div>
+        </div>
+      )}
+      
       {result.wordByWord && result.wordByWord.length > 0 && (
         <div className={`${theme.card} rounded-2xl p-4 mb-4`}>
           <h4 className={`font-medium ${theme.text} mb-3`}>Word Analysis</h4>
@@ -197,11 +208,17 @@ export default function PracticePage() {
       {showRangeModal && surah && <VerseRangeModal surah={surah} onSelect={loadVerses} onClose={() => navigate('/')} />}
       <main className="px-4 py-6 max-w-lg mx-auto">
         {error && <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}<button onClick={() => setError(null)} className="ml-2 underline">Dismiss</button></div>}
-        {verses.length > 0 && step !== 'result' && (
-          <div className={`${theme.card} rounded-2xl p-6 mb-6`}>
-            <div className="arabic-text text-2xl leading-loose" dir="rtl">{verses.map((verse) => (<span key={verse.number}>{verse.text}<span className="verse-separator"> ۝ </span></span>))}</div>
+        
+        {/* VERSES ARE NOW HIDDEN - Only show instruction during recording */}
+        {step === 'record' && (
+          <div className={`${theme.card} rounded-2xl p-6 mb-6 text-center`}>
+            <p className={`text-lg ${theme.text} mb-2`}>🧠 Memorization Test</p>
+            <p className={theme.textMuted}>Recite <strong>Surah {surah.name}</strong></p>
+            <p className={theme.textMuted}>Verses <strong>{verseRange?.start} - {verseRange?.end}</strong></p>
+            <p className={`text-sm ${theme.textMuted} mt-4`}>Verses are hidden. Recite from memory!</p>
           </div>
         )}
+        
         {step === 'record' && <div className="text-center py-8"><RecordingButton isRecording={isRecording} onStart={startRecording} onStop={handleStopRecording} duration={formattedDuration} disabled={loading} /></div>}
         {step === 'transcribe' && <div className="text-center py-12"><Loader2 className={`w-12 h-12 ${theme.accent} mx-auto spinner mb-4`} /><p className={theme.text}>Transcribing your recitation...</p><p className={`text-sm ${theme.textMuted} mt-2`}>This may take a moment</p></div>}
         {step === 'edit' && (
@@ -217,7 +234,7 @@ export default function PracticePage() {
           </div>
         )}
         {step === 'verify' && <div className="text-center py-12"><Loader2 className={`w-12 h-12 ${theme.accent} mx-auto spinner mb-4`} /><p className={theme.text}>Verifying your recitation...</p></div>}
-        {step === 'result' && verificationResult && <VerificationResult result={verificationResult} onRetry={handleRetry} onDone={() => navigate('/')} />}
+        {step === 'result' && verificationResult && <VerificationResult result={verificationResult} verses={verses} onRetry={handleRetry} onDone={() => navigate('/')} />}
       </main>
     </div>
   );
