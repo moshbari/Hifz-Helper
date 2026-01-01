@@ -2,7 +2,7 @@
 import express from 'express';
 import multer from 'multer';
 import { uploadAudio, getAudioUrl, deleteAudio, cleanupOldRecordings } from '../services/r2Storage.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -18,7 +18,7 @@ const upload = multer({
  * POST /api/audio/upload
  * Upload audio recording to R2
  */
-router.post('/upload', authenticateToken, upload.single('audio'), async (req, res) => {
+router.post('/upload', requireAuth, upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No audio file provided' });
