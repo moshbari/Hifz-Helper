@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useRecording } from '../hooks/useRecording';
 import { quranApi, transcribeApi, verifyApi, attemptsApi } from '../services/api';
+import { QuranQuoteCard } from '../components/QuranQuote';
 import {
   ArrowLeft,
   Mic,
@@ -67,15 +68,46 @@ function VerseRangeModal({ surah, onSelect, onClose }) {
 
 function VerificationResult({ result, verses, onRetry, onDone }) {
   const { theme } = useTheme();
-  const getAccuracyColor = (accuracy) => { if (accuracy >= 90) return 'text-emerald-400'; if (accuracy >= 70) return 'text-yellow-400'; return 'text-red-400'; };
+  const isPerfect = result.overallAccuracy === 100;
+  
+  const getAccuracyColor = (accuracy) => { 
+    if (accuracy === 100) return 'text-yellow-400';
+    if (accuracy >= 90) return 'text-emerald-400'; 
+    if (accuracy >= 70) return 'text-yellow-400'; 
+    return 'text-red-400'; 
+  };
+
+  const getIslamicMessage = (accuracy) => {
+    if (accuracy === 100) return { title: "MashaAllah! 🏆", message: "Perfect recitation! May Allah bless your memorization journey." };
+    if (accuracy >= 95) return { title: "Excellent! ⭐", message: "SubhanAllah! You're so close to perfection. Keep going!" };
+    if (accuracy >= 90) return { title: "Great Job! ✨", message: "MashaAllah! Your hard work is showing." };
+    if (accuracy >= 80) return { title: "Well Done! 💪", message: "Alhamdulillah! You're making good progress." };
+    if (accuracy >= 70) return { title: "Good Effort! 📖", message: "Every ayah you learn brings you closer to Allah." };
+    if (accuracy >= 60) return { title: "Keep Going! 🤲", message: "The one who struggles with Quran gets double reward." };
+    return { title: "Don't Give Up! 💚", message: "Allah rewards the effort, not just the result." };
+  };
+
+  const islamicMessage = getIslamicMessage(result.overallAccuracy);
+
   return (
     <div className="animate-fade-in">
-      <div className={`${theme.card} rounded-2xl p-6 mb-4 text-center`}>
+      {/* Score */}
+      <div className={`${theme.card} rounded-2xl p-6 mb-4 text-center ${isPerfect ? 'ring-2 ring-yellow-400' : ''}`}>
+        {isPerfect && <div className="text-4xl mb-2">🎉</div>}
         <div className={`text-5xl font-bold ${getAccuracyColor(result.overallAccuracy)} mb-2`}>{result.overallAccuracy}%</div>
-        <p className={theme.textMuted}>{result.isCorrect ? '✓ Excellent recitation!' : 'Keep practicing!'}</p>
+        <p className={`font-medium ${theme.text}`}>{islamicMessage.title}</p>
+        <p className={`text-sm ${theme.textMuted} mt-1`}>{islamicMessage.message}</p>
       </div>
-      
-      {/* Show original verses only in results */}
+
+      {/* Perfect Score Celebration */}
+      {isPerfect && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-center">
+          <p className="text-yellow-400 font-medium">🌟 Perfect Recitation! 🌟</p>
+          <p className="text-yellow-400/70 text-sm mt-1">You recited every word correctly. May Allah increase your knowledge!</p>
+        </div>
+      )}
+
+      {/* Original Verses - shown only in results */}
       {verses && verses.length > 0 && (
         <div className={`${theme.card} rounded-2xl p-4 mb-4`}>
           <h4 className={`font-medium ${theme.text} mb-3`}>Original Verses:</h4>
@@ -84,7 +116,8 @@ function VerificationResult({ result, verses, onRetry, onDone }) {
           </div>
         </div>
       )}
-      
+
+      {/* Word Analysis */}
       {result.wordByWord && result.wordByWord.length > 0 && (
         <div className={`${theme.card} rounded-2xl p-4 mb-4`}>
           <h4 className={`font-medium ${theme.text} mb-3`}>Word Analysis</h4>
@@ -99,7 +132,32 @@ function VerificationResult({ result, verses, onRetry, onDone }) {
           </div>
         </div>
       )}
-      {result.encouragement && <p className={`text-center ${theme.textMuted} mb-6`}>{result.encouragement}</p>}
+
+      {/* Errors/Mistakes */}
+      {result.errors && result.errors.length > 0 && (
+        <div className={`${theme.card} rounded-2xl p-4 mb-4`}>
+          <h4 className={`font-medium ${theme.text} mb-3`}>Areas to Improve ({result.errors.length})</h4>
+          <div className="space-y-3">
+            {result.errors.slice(0, 5).map((error, idx) => (
+              <div key={idx} className={`pb-3 ${idx < Math.min(result.errors.length, 5) - 1 ? `border-b ${theme.border}` : ''}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-red-400 text-sm">You said:</span>
+                  <span className="arabic-text text-red-400" dir="rtl">{error.recited || '—'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 text-sm">Correct:</span>
+                  <span className="arabic-text text-emerald-400" dir="rtl">{error.original || '—'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quran Quote Card */}
+      <QuranQuoteCard accuracy={result.overallAccuracy} className="mb-4" />
+
+      {/* Actions */}
       <div className="flex gap-3">
         <button onClick={onRetry} className={`flex-1 py-3 ${theme.card} ${theme.border} border rounded-xl ${theme.text} flex items-center justify-center gap-2`}><RefreshCw className="w-5 h-5" />Try Again</button>
         <button onClick={onDone} className={`flex-1 py-3 ${theme.primary} text-white rounded-xl flex items-center justify-center gap-2`}><Check className="w-5 h-5" />Done</button>
@@ -209,7 +267,7 @@ export default function PracticePage() {
       <main className="px-4 py-6 max-w-lg mx-auto">
         {error && <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}<button onClick={() => setError(null)} className="ml-2 underline">Dismiss</button></div>}
         
-        {/* VERSES ARE NOW HIDDEN - Only show instruction during recording */}
+        {/* VERSES ARE HIDDEN - Only show instruction during recording */}
         {step === 'record' && (
           <div className={`${theme.card} rounded-2xl p-6 mb-6 text-center`}>
             <p className={`text-lg ${theme.text} mb-2`}>🧠 Memorization Test</p>
