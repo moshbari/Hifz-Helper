@@ -115,10 +115,37 @@ export const attemptsApi = {
 
   getAttempt: (id) => apiFetch(`/attempts/${id}`),
 
-  deleteAttempt: (id) =>
-    apiFetch(`/attempts/${id}`, { method: 'DELETE' }),
+  deleteAttempt: (id) => apiFetch(`/attempts/${id}`, { method: 'DELETE' }),
 
   getStats: () => apiFetch('/attempts/stats/summary'),
+};
+
+// Audio API
+export const audioApi = {
+  uploadAudio: async (audioBlob, attemptId = null) => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+    if (attemptId) {
+      formData.append('attemptId', attemptId);
+    }
+
+    const response = await fetch(`${API_BASE}/audio/upload`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(error.error || 'Failed to upload audio');
+    }
+
+    return response.json();
+  },
+
+  getAudioUrl: (key) => apiFetch(`/audio/${encodeURIComponent(key)}`),
+
+  deleteAudio: (key) => apiFetch(`/audio/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 };
 
 export default {
@@ -127,4 +154,5 @@ export default {
   verify: verifyApi,
   quran: quranApi,
   attempts: attemptsApi,
+  audio: audioApi,
 };
