@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
-import { attemptsApi, audioApi, transcribeApi } from '../services/api';
+import { attemptsApi, audioApi } from '../services/api';
 import { QuranQuoteCard } from '../components/QuranQuote';
 import {
   ArrowLeft,
@@ -244,7 +244,7 @@ function AttemptCard({ attempt, onDelete, onClick }) {
 }
 
 // Attempt Detail Modal
-function AttemptDetailModal({ attempt, onClose, onTranscriptionUpdate }) {
+function AttemptDetailModal({ attempt, onClose }) {
   const { theme } = useTheme();
   const audioRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -316,16 +316,11 @@ function AttemptDetailModal({ attempt, onClose, onTranscriptionUpdate }) {
   };
 
   const handleReTranscribe = async () => {
-    if (!audioUrl) return;
+    if (!attempt.audio_key) return;
     
     setReTranscribing(true);
     try {
-      // Fetch the audio blob from the URL
-      const response = await fetch(audioUrl);
-      const audioBlob = await response.blob();
-      
-      // Re-transcribe
-      const result = await transcribeApi.transcribe(audioBlob);
+      const result = await audioApi.reTranscribe(attempt.audio_key);
       setNewTranscription(result.transcription);
     } catch (err) {
       console.error('Re-transcription failed:', err);
