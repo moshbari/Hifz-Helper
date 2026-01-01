@@ -64,6 +64,48 @@ const getIslamicMessage = (accuracy) => {
   }
 };
 
+// Helper function to highlight mistakes in recitation text
+const highlightMistakes = (transcription, errors) => {
+  if (!transcription || !errors || errors.length === 0) {
+    return transcription;
+  }
+
+  // Get all the incorrect words from errors
+  const mistakeWords = errors
+    .map(error => error.recited || error.word)
+    .filter(word => word && word !== '—');
+
+  if (mistakeWords.length === 0) {
+    return transcription;
+  }
+
+  // Split transcription into words
+  const words = transcription.split(/\s+/);
+  
+  // Create highlighted version
+  return words.map((word, index) => {
+    // Check if this word matches any mistake (allowing for partial matches due to diacritics)
+    const isMistake = mistakeWords.some(mistake => {
+      // Normalize both words by removing common diacritics for comparison
+      const normalizeArabic = (text) => text.replace(/[\u064B-\u0652\u0670]/g, '');
+      return normalizeArabic(word).includes(normalizeArabic(mistake)) || 
+             normalizeArabic(mistake).includes(normalizeArabic(word)) ||
+             word === mistake;
+    });
+
+    if (isMistake) {
+      return (
+        <span key={index} className="text-red-400 bg-red-500/20 px-1 rounded">
+          {word}
+        </span>
+      );
+    }
+    return <span key={index}>{word}</span>;
+  }).reduce((prev, curr, i) => {
+    return i === 0 ? [curr] : [...prev, ' ', curr];
+  }, []);
+};
+
 // Bottom nav (shared component)
 function BottomNav({ active }) {
   const { theme } = useTheme();
@@ -264,12 +306,12 @@ function AttemptDetailModal({ attempt, onClose }) {
           </div>
         )}
 
-        {/* Your Recitation */}
+        {/* Your Recitation - with mistakes highlighted */}
         {attempt.transcription && (
           <div className="mb-4">
             <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>Your Recitation</p>
             <div className={`${theme.bg} p-3 rounded-lg arabic-text text-lg leading-relaxed`} dir="rtl">
-              {attempt.transcription}
+              {highlightMistakes(attempt.transcription, errors)}
             </div>
           </div>
         )}
