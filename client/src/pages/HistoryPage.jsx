@@ -12,9 +12,58 @@ import {
   Calendar,
   BookOpen,
   Settings,
+  Star,
+  Award,
 } from 'lucide-react';
 
-// Bottom nav (shared component - should be extracted)
+// Islamic encouraging messages based on accuracy
+const getIslamicMessage = (accuracy) => {
+  if (accuracy === 100) {
+    return {
+      title: "MashaAllah! 🌟",
+      message: "Perfect recitation! May Allah bless your memorization journey.",
+      icon: "🏆"
+    };
+  } else if (accuracy >= 95) {
+    return {
+      title: "Excellent! ⭐",
+      message: "SubhanAllah! You're so close to perfection. Keep going!",
+      icon: "🌟"
+    };
+  } else if (accuracy >= 90) {
+    return {
+      title: "Great Job!",
+      message: "MashaAllah! Your hard work is showing. A little more practice!",
+      icon: "✨"
+    };
+  } else if (accuracy >= 80) {
+    return {
+      title: "Well Done!",
+      message: "Alhamdulillah! You're making good progress. Keep practicing!",
+      icon: "💪"
+    };
+  } else if (accuracy >= 70) {
+    return {
+      title: "Good Effort!",
+      message: "Every ayah you learn brings you closer to Allah. Keep trying!",
+      icon: "📖"
+    };
+  } else if (accuracy >= 60) {
+    return {
+      title: "Keep Going!",
+      message: "The Prophet ﷺ said: 'The one who struggles with Quran gets double reward.'",
+      icon: "🤲"
+    };
+  } else {
+    return {
+      title: "Don't Give Up!",
+      message: "Allah rewards the effort, not just the result. Try again!",
+      icon: "💚"
+    };
+  }
+};
+
+// Bottom nav (shared component)
 function BottomNav({ active }) {
   const { theme } = useTheme();
   const navigate = useNavigate();
@@ -48,6 +97,7 @@ function BottomNav({ active }) {
 // Attempt card
 function AttemptCard({ attempt, onDelete, onClick }) {
   const { theme } = useTheme();
+  const isPerfect = attempt.accuracy === 100;
   const isPassed = attempt.status === 'passed' || attempt.accuracy >= 85;
 
   const formatDate = (dateString) => {
@@ -67,6 +117,7 @@ function AttemptCard({ attempt, onDelete, onClick }) {
   };
 
   const getAccuracyColor = (accuracy) => {
+    if (accuracy === 100) return 'text-yellow-400';
     if (accuracy >= 90) return 'text-emerald-400';
     if (accuracy >= 70) return 'text-yellow-400';
     return 'text-red-400';
@@ -74,17 +125,19 @@ function AttemptCard({ attempt, onDelete, onClick }) {
 
   return (
     <div
-      className={`${theme.card} rounded-xl p-4 transition-colors cursor-pointer ${theme.cardHover}`}
+      className={`${theme.card} rounded-xl p-4 transition-colors cursor-pointer ${theme.cardHover} ${isPerfect ? 'ring-2 ring-yellow-400/50' : ''}`}
       onClick={onClick}
     >
       <div className="flex items-start gap-3">
         {/* Status Icon */}
         <div
           className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-            isPassed ? 'bg-emerald-500/20' : 'bg-yellow-500/20'
+            isPerfect ? 'bg-yellow-500/20' : isPassed ? 'bg-emerald-500/20' : 'bg-yellow-500/20'
           }`}
         >
-          {isPassed ? (
+          {isPerfect ? (
+            <Award className="w-5 h-5 text-yellow-400" />
+          ) : isPassed ? (
             <CheckCircle className="w-5 h-5 text-emerald-400" />
           ) : (
             <AlertCircle className="w-5 h-5 text-yellow-400" />
@@ -95,9 +148,12 @@ function AttemptCard({ attempt, onDelete, onClick }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <h3 className={`font-semibold ${theme.text}`}>{attempt.surah_name}</h3>
-            <span className={`font-bold ${getAccuracyColor(attempt.accuracy)}`}>
-              {attempt.accuracy}%
-            </span>
+            <div className="flex items-center gap-1">
+              {isPerfect && <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />}
+              <span className={`font-bold ${getAccuracyColor(attempt.accuracy)}`}>
+                {attempt.accuracy}%
+              </span>
+            </div>
           </div>
           <p className={`text-sm ${theme.textMuted}`}>
             Verses {attempt.verse_start}-{attempt.verse_end}
@@ -128,6 +184,147 @@ function AttemptCard({ attempt, onDelete, onClick }) {
           </button>
           <ChevronRight className={`w-5 h-5 ${theme.textMuted}`} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Attempt Detail Modal
+function AttemptDetailModal({ attempt, onClose }) {
+  const { theme } = useTheme();
+  const islamicMessage = getIslamicMessage(attempt.accuracy);
+  const isPerfect = attempt.accuracy === 100;
+
+  const getAccuracyColor = (accuracy) => {
+    if (accuracy === 100) return 'text-yellow-400';
+    if (accuracy >= 90) return 'text-emerald-400';
+    if (accuracy >= 70) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
+  // Parse errors if stored as string
+  let errors = [];
+  try {
+    if (typeof attempt.errors === 'string') {
+      errors = JSON.parse(attempt.errors);
+    } else if (Array.isArray(attempt.errors)) {
+      errors = attempt.errors;
+    }
+  } catch (e) {
+    errors = [];
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className={`${theme.card} rounded-t-2xl sm:rounded-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-fade-in`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header with Score */}
+        <div className="text-center mb-6">
+          <div className={`text-5xl mb-2`}>{islamicMessage.icon}</div>
+          <div className={`text-4xl font-bold ${getAccuracyColor(attempt.accuracy)} mb-1`}>
+            {attempt.accuracy}%
+          </div>
+          <h3 className={`text-lg font-semibold ${theme.text}`}>
+            {attempt.surah_name}
+          </h3>
+          <p className={`text-sm ${theme.textMuted}`}>
+            Verses {attempt.verse_start}-{attempt.verse_end}
+          </p>
+        </div>
+
+        {/* Islamic Message */}
+        <div className={`${theme.bg} rounded-xl p-4 mb-4 text-center`}>
+          <p className={`font-medium ${theme.text} mb-1`}>{islamicMessage.title}</p>
+          <p className={`text-sm ${theme.textMuted}`}>{islamicMessage.message}</p>
+        </div>
+
+        {/* Perfect Score Celebration */}
+        {isPerfect && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-center">
+            <p className="text-yellow-400 font-medium">🎉 Perfect Recitation! 🎉</p>
+            <p className="text-yellow-400/70 text-sm mt-1">
+              You recited every word correctly. MashaAllah!
+            </p>
+          </div>
+        )}
+
+        {/* Original Text */}
+        {attempt.original_text && (
+          <div className="mb-4">
+            <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>Original Text</p>
+            <div className={`${theme.bg} p-3 rounded-lg arabic-text text-lg leading-relaxed`} dir="rtl">
+              {attempt.original_text}
+            </div>
+          </div>
+        )}
+
+        {/* Your Recitation */}
+        {attempt.transcription && (
+          <div className="mb-4">
+            <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>Your Recitation</p>
+            <div className={`${theme.bg} p-3 rounded-lg arabic-text text-lg leading-relaxed`} dir="rtl">
+              {attempt.transcription}
+            </div>
+          </div>
+        )}
+
+        {/* Mistakes Section */}
+        {errors && errors.length > 0 && (
+          <div className="mb-4">
+            <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>
+              Mistakes to Review ({errors.length})
+            </p>
+            <div className={`${theme.bg} rounded-lg p-3 space-y-3`}>
+              {errors.map((error, idx) => (
+                <div key={idx} className={`pb-3 ${idx < errors.length - 1 ? `border-b ${theme.border}` : ''}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-red-400 text-sm">You said:</span>
+                    <span className="arabic-text text-red-400" dir="rtl">
+                      {error.recited || error.word || '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 text-sm">Correct:</span>
+                    <span className="arabic-text text-emerald-400" dir="rtl">
+                      {error.original || error.correct || '—'}
+                    </span>
+                  </div>
+                  {error.suggestion && (
+                    <p className={`text-xs ${theme.textMuted} mt-1`}>💡 {error.suggestion}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* No Mistakes Message */}
+        {(!errors || errors.length === 0) && !isPerfect && (
+          <div className={`${theme.bg} rounded-lg p-4 mb-4 text-center`}>
+            <p className={theme.textMuted}>No specific mistakes recorded.</p>
+            <p className={`text-sm ${theme.textMuted} mt-1`}>Keep practicing to improve!</p>
+          </div>
+        )}
+
+        {/* Encouragement for non-perfect */}
+        {!isPerfect && (
+          <div className={`text-center ${theme.textMuted} text-sm mb-4`}>
+            <p>📿 "Whoever recites the Quran and masters it by heart, will be with the noble righteous scribes in Heaven."</p>
+            <p className="text-xs mt-1">— Prophet Muhammad ﷺ</p>
+          </div>
+        )}
+
+        <button
+          onClick={onClose}
+          className={`w-full py-3 ${theme.primary} text-white rounded-lg mt-4`}
+        >
+          Close
+        </button>
       </div>
     </div>
   );
@@ -182,6 +379,9 @@ export default function HistoryPage() {
     return groups;
   }, {});
 
+  // Count perfect scores
+  const perfectCount = attempts.filter(a => a.accuracy === 100).length;
+
   return (
     <div className={`min-h-screen ${theme.bg} pb-20`}>
       {/* Header */}
@@ -204,8 +404,8 @@ export default function HistoryPage() {
                 <p className={`text-xs ${theme.textMuted}`}>Avg</p>
               </div>
               <div className="text-center">
-                <p className={`text-2xl font-bold text-orange-400`}>{stats.streakDays}</p>
-                <p className={`text-xs ${theme.textMuted}`}>Streak</p>
+                <p className={`text-2xl font-bold text-yellow-400`}>{perfectCount}</p>
+                <p className={`text-xs ${theme.textMuted}`}>Perfect</p>
               </div>
             </div>
           )}
@@ -259,57 +459,10 @@ export default function HistoryPage() {
 
       {/* Attempt Detail Modal */}
       {selectedAttempt && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4"
-          onClick={() => setSelectedAttempt(null)}
-        >
-          <div
-            className={`${theme.card} rounded-t-2xl sm:rounded-2xl w-full max-w-md p-6 max-h-[80vh] overflow-y-auto animate-fade-in`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-lg font-semibold ${theme.text}`}>
-                {selectedAttempt.surah_name}
-              </h3>
-              <span
-                className={`text-2xl font-bold ${
-                  selectedAttempt.accuracy >= 85 ? 'text-emerald-400' : 'text-yellow-400'
-                }`}
-              >
-                {selectedAttempt.accuracy}%
-              </span>
-            </div>
-
-            <p className={`text-sm ${theme.textMuted} mb-4`}>
-              Verses {selectedAttempt.verse_start}-{selectedAttempt.verse_end}
-            </p>
-
-            {selectedAttempt.original_text && (
-              <div className="mb-4">
-                <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>Original Text</p>
-                <div className={`${theme.bg} p-3 rounded-lg arabic-text text-lg`} dir="rtl">
-                  {selectedAttempt.original_text}
-                </div>
-              </div>
-            )}
-
-            {selectedAttempt.transcription && (
-              <div className="mb-4">
-                <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>Your Recitation</p>
-                <div className={`${theme.bg} p-3 rounded-lg arabic-text text-lg`} dir="rtl">
-                  {selectedAttempt.transcription}
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={() => setSelectedAttempt(null)}
-              className={`w-full py-3 ${theme.primary} text-white rounded-lg mt-4`}
-            >
-              Close
-            </button>
-          </div>
-        </div>
+        <AttemptDetailModal 
+          attempt={selectedAttempt} 
+          onClose={() => setSelectedAttempt(null)} 
+        />
       )}
 
       <BottomNav active="history" />
