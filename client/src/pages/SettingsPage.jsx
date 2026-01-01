@@ -1,305 +1,471 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { 
-  ChevronLeft,
-  User,
-  Palette,
-  Volume2,
-  Bell,
-  Shield,
-  LogOut,
+import { attemptsApi } from '../services/api';
+import {
+  ArrowLeft,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Trash2,
   ChevronRight,
-  Moon,
-  Sun,
-  Check,
-  Wifi,
-  WifiOff
+  Calendar,
+  BookOpen,
+  Settings,
+  Star,
+  Award,
 } from 'lucide-react';
-import QuranQuote from '../components/QuranQuote';
 
-// Theme options
-const THEME_OPTIONS = [
-  { id: 'ocean', name: 'Ocean', gradient: 'from-blue-900 via-blue-800 to-cyan-900', accent: 'text-cyan-400' },
-  { id: 'forest', name: 'Forest', gradient: 'from-green-900 via-emerald-800 to-teal-900', accent: 'text-emerald-400' },
-  { id: 'sunset', name: 'Sunset', gradient: 'from-orange-900 via-red-800 to-pink-900', accent: 'text-orange-400' },
-  { id: 'midnight', name: 'Midnight', gradient: 'from-slate-900 via-purple-900 to-slate-900', accent: 'text-purple-400' },
-  { id: 'desert', name: 'Desert', gradient: 'from-amber-900 via-yellow-800 to-orange-900', accent: 'text-amber-400' },
-  { id: 'light', name: 'Light', gradient: 'from-gray-100 via-gray-50 to-white', accent: 'text-blue-600', isLight: true },
-];
+// Islamic encouraging messages based on accuracy
+const getIslamicMessage = (accuracy) => {
+  if (accuracy === 100) {
+    return {
+      title: "MashaAllah! 🌟",
+      message: "Perfect recitation! May Allah bless your memorization journey.",
+      icon: "🏆"
+    };
+  } else if (accuracy >= 95) {
+    return {
+      title: "Excellent! ⭐",
+      message: "SubhanAllah! You're so close to perfection. Keep going!",
+      icon: "🌟"
+    };
+  } else if (accuracy >= 90) {
+    return {
+      title: "Great Job!",
+      message: "MashaAllah! Your hard work is showing. A little more practice!",
+      icon: "✨"
+    };
+  } else if (accuracy >= 80) {
+    return {
+      title: "Well Done!",
+      message: "Alhamdulillah! You're making good progress. Keep practicing!",
+      icon: "💪"
+    };
+  } else if (accuracy >= 70) {
+    return {
+      title: "Good Effort!",
+      message: "Every ayah you learn brings you closer to Allah. Keep trying!",
+      icon: "📖"
+    };
+  } else if (accuracy >= 60) {
+    return {
+      title: "Keep Going!",
+      message: "The Prophet ﷺ said: 'The one who struggles with Quran gets double reward.'",
+      icon: "🤲"
+    };
+  } else {
+    return {
+      title: "Don't Give Up!",
+      message: "Allah rewards the effort, not just the result. Try again!",
+      icon: "💚"
+    };
+  }
+};
 
-export default function SettingsPage() {
+// Bottom nav (shared component)
+function BottomNav({ active }) {
+  const { theme } = useTheme();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
-  const { theme, themeName, setTheme } = useTheme();
-  
-  const [settings, setSettings] = useState({
-    fontSize: 'medium',
-    autoPlayAudio: true,
-    notifications: true,
-    offlineMode: false,
-    playbackSpeed: 1.0
-  });
 
-  const [offlineCount, setOfflineCount] = useState(0);
+  const tabs = [
+    { id: 'home', icon: BookOpen, label: 'Surahs', path: '/' },
+    { id: 'history', icon: Clock, label: 'History', path: '/history' },
+    { id: 'settings', icon: Settings, label: 'Settings', path: '/settings' },
+  ];
 
-  useEffect(() => {
-    // Load settings from localStorage
-    const savedSettings = JSON.parse(localStorage.getItem('hifz-settings') || '{}');
-    setSettings(prev => ({ ...prev, ...savedSettings }));
+  return (
+    <nav className={`fixed bottom-0 left-0 right-0 ${theme.card} border-t ${theme.border} safe-bottom`}>
+      <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => navigate(tab.path)}
+            className={`flex flex-col items-center justify-center w-full h-full transition-colors ${
+              active === tab.id ? theme.accent : theme.textMuted
+            }`}
+          >
+            <tab.icon className="w-5 h-5" />
+            <span className="text-xs mt-1">{tab.label}</span>
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+}
 
-    // Check offline cache
-    const offlineAttempts = JSON.parse(localStorage.getItem('hifz-offline-queue') || '[]');
-    setOfflineCount(offlineAttempts.length);
-  }, []);
+// Attempt card
+function AttemptCard({ attempt, onDelete, onClick }) {
+  const { theme } = useTheme();
+  const isPerfect = attempt.accuracy === 100;
+  const isPassed = attempt.status === 'passed' || attempt.accuracy >= 85;
 
-  const updateSetting = (key, value) => {
-    const newSettings = { ...settings, [key]: value };
-    setSettings(newSettings);
-    localStorage.setItem('hifz-settings', JSON.stringify(newSettings));
-  };
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
 
-  const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to log out?')) {
-      await logout();
-      navigate('/login');
+    if (diffDays === 0) {
+      return `Today, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    } else {
+      return date.toLocaleDateString();
     }
   };
 
-  const syncOffline = async () => {
-    // In production, this would sync offline attempts to the server
-    alert('Syncing offline attempts...');
-    localStorage.setItem('hifz-offline-queue', JSON.stringify([]));
-    setOfflineCount(0);
+  const getAccuracyColor = (accuracy) => {
+    if (accuracy === 100) return 'text-yellow-400';
+    if (accuracy >= 90) return 'text-emerald-400';
+    if (accuracy >= 70) return 'text-yellow-400';
+    return 'text-red-400';
   };
 
   return (
-    <div className="min-h-screen pb-24">
-      {/* Header */}
-      <div className="bg-black/20 backdrop-blur-lg px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
-        <button 
-          onClick={() => navigate('/')}
-          className="text-white/70 hover:text-white transition-colors"
+    <div
+      className={`${theme.card} rounded-xl p-4 transition-colors cursor-pointer ${theme.cardHover} ${isPerfect ? 'ring-2 ring-yellow-400/50' : ''}`}
+      onClick={onClick}
+    >
+      <div className="flex items-start gap-3">
+        {/* Status Icon */}
+        <div
+          className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+            isPerfect ? 'bg-yellow-500/20' : isPassed ? 'bg-emerald-500/20' : 'bg-yellow-500/20'
+          }`}
         >
-          <ChevronLeft className="w-6 h-6" />
-        </button>
-        <h1 className="text-white font-bold text-lg">Settings</h1>
-      </div>
+          {isPerfect ? (
+            <Award className="w-5 h-5 text-yellow-400" />
+          ) : isPassed ? (
+            <CheckCircle className="w-5 h-5 text-emerald-400" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-yellow-400" />
+          )}
+        </div>
 
-      <div className="p-4">
-        {/* User Profile Section */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
-          <div className="flex items-center gap-4">
-            <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${theme.accentGradient} flex items-center justify-center`}>
-              <User className="w-7 h-7 text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="text-white font-semibold">{user?.name || 'Student'}</p>
-              <p className="text-white/50 text-sm">{user?.email || 'student@example.com'}</p>
-              <span className={`inline-block mt-1 px-2 py-0.5 ${theme.accentText} bg-white/10 rounded text-xs`}>
-                {user?.role || 'Student'}
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <h3 className={`font-semibold ${theme.text}`}>{attempt.surah_name}</h3>
+            <div className="flex items-center gap-1">
+              {isPerfect && <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />}
+              <span className={`font-bold ${getAccuracyColor(attempt.accuracy)}`}>
+                {attempt.accuracy}%
               </span>
             </div>
           </div>
-        </div>
-
-        {/* Inspirational Quote */}
-        <QuranQuote 
-          variant="default" 
-          showRefresh={true}
-          className="mb-6"
-        />
-
-        {/* Theme Selection */}
-        <div className="mb-6">
-          <h2 className="text-white/60 text-sm mb-3 flex items-center gap-2">
-            <Palette className="w-4 h-4" />
-            Theme
-          </h2>
-          <div className="grid grid-cols-3 gap-2">
-            {THEME_OPTIONS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTheme(t.id)}
-                className={`relative rounded-xl p-3 border-2 transition-all ${
-                  themeName === t.id 
-                    ? 'border-white/60' 
-                    : 'border-transparent hover:border-white/20'
-                }`}
-              >
-                <div className={`h-12 rounded-lg bg-gradient-to-br ${t.gradient} mb-2`} />
-                <p className={`text-xs ${t.isLight ? 'text-gray-800' : 'text-white/70'}`}>
-                  {t.name}
-                </p>
-                {themeName === t.id && (
-                  <div className="absolute top-2 right-2 w-5 h-5 bg-white rounded-full flex items-center justify-center">
-                    <Check className="w-3 h-3 text-gray-800" />
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Font Size */}
-        <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-white">Arabic Font Size</span>
-          </div>
-          <div className="flex bg-white/10 rounded-xl p-1">
-            {['small', 'medium', 'large', 'xlarge'].map((size) => (
-              <button
-                key={size}
-                onClick={() => updateSetting('fontSize', size)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  settings.fontSize === size 
-                    ? 'bg-white text-gray-800' 
-                    : 'text-white/60 hover:text-white'
-                }`}
-              >
-                {size === 'xlarge' ? 'XL' : size.charAt(0).toUpperCase() + size.slice(1)}
-              </button>
-            ))}
-          </div>
-          {/* Preview */}
-          <div 
-            className="mt-3 p-3 bg-black/20 rounded-lg"
-            dir="rtl"
-            style={{ fontFamily: "'Amiri', serif" }}
-          >
-            <p className={`text-white text-center ${
-              settings.fontSize === 'small' ? 'text-lg' :
-              settings.fontSize === 'medium' ? 'text-xl' :
-              settings.fontSize === 'large' ? 'text-2xl' : 'text-3xl'
-            }`}>
-              بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-            </p>
-          </div>
-        </div>
-
-        {/* Playback Speed */}
-        <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-white flex items-center gap-2">
-              <Volume2 className="w-4 h-4 text-white/60" />
-              Playback Speed
-            </span>
-            <span className="text-white/60">{settings.playbackSpeed}x</span>
-          </div>
-          <input
-            type="range"
-            min="0.5"
-            max="2"
-            step="0.25"
-            value={settings.playbackSpeed}
-            onChange={(e) => updateSetting('playbackSpeed', parseFloat(e.target.value))}
-            className="w-full accent-emerald-500"
-          />
-          <div className="flex justify-between text-white/40 text-xs mt-1">
-            <span>0.5x</span>
-            <span>1x</span>
-            <span>1.5x</span>
-            <span>2x</span>
-          </div>
-        </div>
-
-        {/* Toggle Settings */}
-        <div className="space-y-2 mb-6">
-          {/* Auto-play Audio */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Volume2 className="w-5 h-5 text-white/60" />
-              <span className="text-white">Auto-play Audio</span>
-            </div>
-            <button
-              onClick={() => updateSetting('autoPlayAudio', !settings.autoPlayAudio)}
-              className={`w-12 h-7 rounded-full transition-colors relative ${
-                settings.autoPlayAudio ? 'bg-emerald-500' : 'bg-white/20'
-              }`}
-            >
-              <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                settings.autoPlayAudio ? 'left-6' : 'left-1'
-              }`} />
-            </button>
-          </div>
-
-          {/* Notifications */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Bell className="w-5 h-5 text-white/60" />
-              <span className="text-white">Notifications</span>
-            </div>
-            <button
-              onClick={() => updateSetting('notifications', !settings.notifications)}
-              className={`w-12 h-7 rounded-full transition-colors relative ${
-                settings.notifications ? 'bg-emerald-500' : 'bg-white/20'
-              }`}
-            >
-              <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                settings.notifications ? 'left-6' : 'left-1'
-              }`} />
-            </button>
-          </div>
-
-          {/* Offline Mode */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {settings.offlineMode ? (
-                  <WifiOff className="w-5 h-5 text-amber-400" />
-                ) : (
-                  <Wifi className="w-5 h-5 text-white/60" />
-                )}
-                <div>
-                  <span className="text-white">Offline Mode</span>
-                  {offlineCount > 0 && (
-                    <p className="text-amber-400 text-xs">{offlineCount} pending sync</p>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={() => updateSetting('offlineMode', !settings.offlineMode)}
-                className={`w-12 h-7 rounded-full transition-colors relative ${
-                  settings.offlineMode ? 'bg-amber-500' : 'bg-white/20'
-                }`}
-              >
-                <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                  settings.offlineMode ? 'left-6' : 'left-1'
-                }`} />
-              </button>
-            </div>
-            {offlineCount > 0 && (
-              <button
-                onClick={syncOffline}
-                className="mt-3 w-full py-2 bg-amber-500/20 text-amber-400 rounded-lg text-sm hover:bg-amber-500/30 transition-colors"
-              >
-                Sync Now
-              </button>
+          <p className={`text-sm ${theme.textMuted}`}>
+            Verses {attempt.verse_start}-{attempt.verse_end}
+          </p>
+          <div className={`flex items-center gap-2 mt-1 text-xs ${theme.textMuted}`}>
+            <Calendar className="w-3 h-3" />
+            {formatDate(attempt.created_at)}
+            {attempt.duration && (
+              <>
+                <span>•</span>
+                <Clock className="w-3 h-3" />
+                {Math.floor(attempt.duration / 60)}:{(attempt.duration % 60).toString().padStart(2, '0')}
+              </>
             )}
           </div>
         </div>
 
-        {/* Logout Button */}
-        <button
-          onClick={handleLogout}
-          className="w-full py-4 bg-red-500/20 border border-red-500/40 text-red-400 font-semibold rounded-xl flex items-center justify-center gap-2 hover:bg-red-500/30 transition-colors"
-        >
-          <LogOut className="w-5 h-5" />
-          Log Out
-        </button>
-
-        {/* Footer Quote */}
-        <QuranQuote 
-          variant="minimal" 
-          className="mt-8"
-        />
-
-        {/* Version Info */}
-        <p className="text-center text-white/30 text-xs mt-4">
-          Hifz Helper v1.0.0
-        </p>
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(attempt.id);
+            }}
+            className={`p-2 ${theme.textMuted} hover:text-red-400 transition-colors`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <ChevronRight className={`w-5 h-5 ${theme.textMuted}`} />
+        </div>
       </div>
+    </div>
+  );
+}
+
+// Attempt Detail Modal
+function AttemptDetailModal({ attempt, onClose }) {
+  const { theme } = useTheme();
+  const islamicMessage = getIslamicMessage(attempt.accuracy);
+  const isPerfect = attempt.accuracy === 100;
+
+  const getAccuracyColor = (accuracy) => {
+    if (accuracy === 100) return 'text-yellow-400';
+    if (accuracy >= 90) return 'text-emerald-400';
+    if (accuracy >= 70) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
+  // Parse errors if stored as string
+  let errors = [];
+  try {
+    if (typeof attempt.errors === 'string') {
+      errors = JSON.parse(attempt.errors);
+    } else if (Array.isArray(attempt.errors)) {
+      errors = attempt.errors;
+    }
+  } catch (e) {
+    errors = [];
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className={`${theme.card} rounded-t-2xl sm:rounded-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto animate-fade-in`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header with Score */}
+        <div className="text-center mb-6">
+          <div className={`text-5xl mb-2`}>{islamicMessage.icon}</div>
+          <div className={`text-4xl font-bold ${getAccuracyColor(attempt.accuracy)} mb-1`}>
+            {attempt.accuracy}%
+          </div>
+          <h3 className={`text-lg font-semibold ${theme.text}`}>
+            {attempt.surah_name}
+          </h3>
+          <p className={`text-sm ${theme.textMuted}`}>
+            Verses {attempt.verse_start}-{attempt.verse_end}
+          </p>
+        </div>
+
+        {/* Islamic Message */}
+        <div className={`${theme.bg} rounded-xl p-4 mb-4 text-center`}>
+          <p className={`font-medium ${theme.text} mb-1`}>{islamicMessage.title}</p>
+          <p className={`text-sm ${theme.textMuted}`}>{islamicMessage.message}</p>
+        </div>
+
+        {/* Perfect Score Celebration */}
+        {isPerfect && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-center">
+            <p className="text-yellow-400 font-medium">🎉 Perfect Recitation! 🎉</p>
+            <p className="text-yellow-400/70 text-sm mt-1">
+              You recited every word correctly. MashaAllah!
+            </p>
+          </div>
+        )}
+
+        {/* Original Text */}
+        {attempt.original_text && (
+          <div className="mb-4">
+            <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>Original Text</p>
+            <div className={`${theme.bg} p-3 rounded-lg arabic-text text-lg leading-relaxed`} dir="rtl">
+              {attempt.original_text}
+            </div>
+          </div>
+        )}
+
+        {/* Your Recitation */}
+        {attempt.transcription && (
+          <div className="mb-4">
+            <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>Your Recitation</p>
+            <div className={`${theme.bg} p-3 rounded-lg arabic-text text-lg leading-relaxed`} dir="rtl">
+              {attempt.transcription}
+            </div>
+          </div>
+        )}
+
+        {/* Mistakes Section */}
+        {errors && errors.length > 0 && (
+          <div className="mb-4">
+            <p className={`text-sm font-medium ${theme.textMuted} mb-2`}>
+              Mistakes to Review ({errors.length})
+            </p>
+            <div className={`${theme.bg} rounded-lg p-3 space-y-3`}>
+              {errors.map((error, idx) => (
+                <div key={idx} className={`pb-3 ${idx < errors.length - 1 ? `border-b ${theme.border}` : ''}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-red-400 text-sm">You said:</span>
+                    <span className="arabic-text text-red-400" dir="rtl">
+                      {error.recited || error.word || '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 text-sm">Correct:</span>
+                    <span className="arabic-text text-emerald-400" dir="rtl">
+                      {error.original || error.correct || '—'}
+                    </span>
+                  </div>
+                  {error.suggestion && (
+                    <p className={`text-xs ${theme.textMuted} mt-1`}>💡 {error.suggestion}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* No Mistakes Message */}
+        {(!errors || errors.length === 0) && !isPerfect && (
+          <div className={`${theme.bg} rounded-lg p-4 mb-4 text-center`}>
+            <p className={theme.textMuted}>No specific mistakes recorded.</p>
+            <p className={`text-sm ${theme.textMuted} mt-1`}>Keep practicing to improve!</p>
+          </div>
+        )}
+
+        {/* Encouragement for non-perfect */}
+        {!isPerfect && (
+          <div className={`text-center ${theme.textMuted} text-sm mb-4`}>
+            <p>📿 "Whoever recites the Quran and masters it by heart, will be with the noble righteous scribes in Heaven."</p>
+            <p className="text-xs mt-1">— Prophet Muhammad ﷺ</p>
+          </div>
+        )}
+
+        <button
+          onClick={onClose}
+          className={`w-full py-3 ${theme.primary} text-white rounded-lg mt-4`}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function HistoryPage() {
+  const { theme } = useTheme();
+  const navigate = useNavigate();
+
+  const [attempts, setAttempts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState(null);
+  const [selectedAttempt, setSelectedAttempt] = useState(null);
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = async () => {
+    try {
+      const [attemptsRes, statsRes] = await Promise.all([
+        attemptsApi.getAttempts(50),
+        attemptsApi.getStats(),
+      ]);
+      setAttempts(attemptsRes.attempts);
+      setStats(statsRes.stats);
+    } catch (error) {
+      console.error('Failed to load history:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this attempt?')) return;
+
+    try {
+      await attemptsApi.deleteAttempt(id);
+      setAttempts((prev) => prev.filter((a) => a.id !== id));
+    } catch (error) {
+      console.error('Failed to delete attempt:', error);
+    }
+  };
+
+  // Group attempts by date
+  const groupedAttempts = attempts.reduce((groups, attempt) => {
+    const date = new Date(attempt.created_at).toDateString();
+    if (!groups[date]) {
+      groups[date] = [];
+    }
+    groups[date].push(attempt);
+    return groups;
+  }, {});
+
+  // Count perfect scores
+  const perfectCount = attempts.filter(a => a.accuracy === 100).length;
+
+  return (
+    <div className={`min-h-screen ${theme.bg} pb-20`}>
+      {/* Header */}
+      <header className={`${theme.card} px-4 py-6 safe-top`}>
+        <div className="max-w-lg mx-auto">
+          <h1 className={`text-xl font-bold ${theme.text}`}>Practice History</h1>
+          
+          {stats && (
+            <div className="grid grid-cols-4 gap-4 mt-4">
+              <div className="text-center">
+                <p className={`text-2xl font-bold ${theme.text}`}>{stats.totalAttempts}</p>
+                <p className={`text-xs ${theme.textMuted}`}>Total</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-2xl font-bold text-emerald-400`}>{stats.passedCount}</p>
+                <p className={`text-xs ${theme.textMuted}`}>Passed</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-2xl font-bold ${theme.accent}`}>{stats.averageAccuracy}%</p>
+                <p className={`text-xs ${theme.textMuted}`}>Avg</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-2xl font-bold text-yellow-400`}>{perfectCount}</p>
+                <p className={`text-xs ${theme.textMuted}`}>Perfect</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* History List */}
+      <main className="px-4 py-6 max-w-lg mx-auto">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full spinner" />
+          </div>
+        ) : attempts.length === 0 ? (
+          <div className={`text-center py-12 ${theme.textMuted}`}>
+            <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>No practice history yet</p>
+            <p className="text-sm mt-1">Start practicing to see your progress!</p>
+            <button
+              onClick={() => navigate('/')}
+              className={`mt-4 px-6 py-2 ${theme.primary} text-white rounded-lg`}
+            >
+              Start Practicing
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {Object.entries(groupedAttempts).map(([date, dateAttempts]) => (
+              <div key={date}>
+                <h2 className={`text-sm font-medium ${theme.textMuted} mb-3`}>
+                  {new Date(date).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </h2>
+                <div className="space-y-3">
+                  {dateAttempts.map((attempt) => (
+                    <AttemptCard
+                      key={attempt.id}
+                      attempt={attempt}
+                      onDelete={handleDelete}
+                      onClick={() => setSelectedAttempt(attempt)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Attempt Detail Modal */}
+      {selectedAttempt && (
+        <AttemptDetailModal 
+          attempt={selectedAttempt} 
+          onClose={() => setSelectedAttempt(null)} 
+        />
+      )}
+
+      <BottomNav active="history" />
     </div>
   );
 }

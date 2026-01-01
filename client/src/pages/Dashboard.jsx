@@ -1,163 +1,283 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { 
-  Mic, 
-  History, 
-  Star, 
-  CheckCircle, 
-  XCircle,
+import { quranApi, attemptsApi } from '../services/api';
+import { QuranQuoteCard } from '../components/QuranQuote';
+import {
+  BookOpen,
+  Search,
+  Heart,
+  Clock,
   Settings,
-  BookOpen
+  ChevronRight,
+  Flame,
+  Target,
+  TrendingUp,
+  LogOut,
 } from 'lucide-react';
-import QuranQuote from '../components/QuranQuote';
 
-export default function Dashboard() {
-  const { user } = useAuth();
+// Navigation bar component
+function BottomNav({ active }) {
   const { theme } = useTheme();
   const navigate = useNavigate();
 
-  // Get user's favorites and recent attempts from localStorage or context
-  const favorites = JSON.parse(localStorage.getItem('hifz-favorites') || '[]');
-  const history = JSON.parse(localStorage.getItem('hifz-history') || '[]');
-
-  // Sample surah data for bookmarks display
-  const SAMPLE_SURAHS = {
-    1: { name: 'Al-Fatihah', nameAr: 'الفاتحة' },
-    36: { name: 'Ya-Sin', nameAr: 'يس' },
-    67: { name: 'Al-Mulk', nameAr: 'الملك' },
-    112: { name: 'Al-Ikhlas', nameAr: 'الإخلاص' },
-    114: { name: 'An-Nas', nameAr: 'الناس' },
-  };
+  const tabs = [
+    { id: 'home', icon: BookOpen, label: 'Surahs', path: '/' },
+    { id: 'history', icon: Clock, label: 'History', path: '/history' },
+    { id: 'settings', icon: Settings, label: 'Settings', path: '/settings' },
+  ];
 
   return (
-    <div className="min-h-screen pb-24">
-      {/* Main Content */}
-      <div className="p-4">
-        {/* Greeting */}
-        <p className="text-white/60 text-sm">Assalamu Alaikum,</p>
-        <h1 className="text-2xl font-bold text-white mb-4">
-          {user?.name || 'Student'}
-        </h1>
-
-        {/* Daily Quran Quote - Featured on Dashboard */}
-        <QuranQuote 
-          variant="default" 
-          showRefresh={true} 
-          className="mb-6"
-        />
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
+    <nav className={`fixed bottom-0 left-0 right-0 ${theme.card} border-t ${theme.border} safe-bottom`}>
+      <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
+        {tabs.map((tab) => (
           <button
-            onClick={() => navigate('/practice')}
-            className="bg-emerald-500/20 border border-emerald-500/40 rounded-2xl p-4 text-left hover:bg-emerald-500/30 transition-colors"
+            key={tab.id}
+            onClick={() => navigate(tab.path)}
+            className={`flex flex-col items-center justify-center w-full h-full transition-colors ${
+              active === tab.id ? theme.accent : theme.textMuted
+            }`}
           >
-            <Mic className="w-8 h-8 text-emerald-400 mb-2" />
-            <p className="text-white font-semibold">New Recitation</p>
-            <p className="text-white/50 text-sm">Start practicing</p>
+            <tab.icon className="w-5 h-5" />
+            <span className="text-xs mt-1">{tab.label}</span>
           </button>
-          
-          <button
-            onClick={() => navigate('/history')}
-            className="bg-blue-500/20 border border-blue-500/40 rounded-2xl p-4 text-left hover:bg-blue-500/30 transition-colors"
-          >
-            <History className="w-8 h-8 text-blue-400 mb-2" />
-            <p className="text-white font-semibold">History</p>
-            <p className="text-white/50 text-sm">View attempts</p>
-          </button>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+// Stats card
+function StatsCard({ icon: Icon, label, value, color }) {
+  const { theme } = useTheme();
+
+  return (
+    <div className={`${theme.card} rounded-xl p-4`}>
+      <div className={`w-10 h-10 rounded-lg ${color} flex items-center justify-center mb-2`}>
+        <Icon className="w-5 h-5 text-white" />
+      </div>
+      <p className={`text-2xl font-bold ${theme.text}`}>{value}</p>
+      <p className={`text-sm ${theme.textMuted}`}>{label}</p>
+    </div>
+  );
+}
+
+// Surah card
+function SurahCard({ surah, isFavorite, onToggleFavorite, onClick }) {
+  const { theme } = useTheme();
+
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full ${theme.card} ${theme.cardHover} rounded-xl p-4 flex items-center gap-4 transition-colors text-left`}
+    >
+      <div className={`w-12 h-12 ${theme.primary} rounded-xl flex items-center justify-center flex-shrink-0`}>
+        <span className="text-white font-semibold">{surah.number}</span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <h3 className={`font-semibold ${theme.text} truncate`}>{surah.name}</h3>
+          <span className={`text-lg ${theme.textMuted}`} dir="rtl">{surah.nameAr}</span>
         </div>
+        <p className={`text-sm ${theme.textMuted}`}>
+          {surah.versesCount} verses • {surah.revelationType}
+        </p>
+      </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleFavorite(surah.number);
+        }}
+        className="p-2"
+      >
+        <Heart
+          className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : theme.textMuted}`}
+        />
+      </button>
+      <ChevronRight className={`w-5 h-5 ${theme.textMuted}`} />
+    </button>
+  );
+}
 
-        {/* Bookmarked Surahs */}
-        {favorites.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <Star className="w-5 h-5 text-yellow-400" />
-              Bookmarked
-            </h2>
-            <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
-              {favorites.slice(0, 5).map((id) => (
-                <button
-                  key={id}
-                  onClick={() => navigate(`/practice/${id}`)}
-                  className="flex-shrink-0 bg-white/10 border border-white/20 rounded-xl px-4 py-3 hover:bg-white/20 transition-colors"
-                >
-                  <p 
-                    className={`${theme.accentText} text-lg`} 
-                    dir="rtl"
-                    style={{ fontFamily: "'Amiri', serif" }}
-                  >
-                    {SAMPLE_SURAHS[id]?.nameAr || `سورة ${id}`}
-                  </p>
-                  <p className="text-white/60 text-xs">
-                    {SAMPLE_SURAHS[id]?.name || `Surah ${id}`}
-                  </p>
-                </button>
-              ))}
+export default function Dashboard() {
+  const { user, logout } = useAuth();
+  const { theme } = useTheme();
+  const navigate = useNavigate();
+
+  const [surahs, setSurahs] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [search, setSearch] = useState('');
+  const [favorites, setFavorites] = useState(() => {
+    const saved = localStorage.getItem('hifz-favorites');
+    return saved ? JSON.parse(saved) : [1, 112, 113, 114];
+  });
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('hifz-favorites', JSON.stringify(favorites));
+  }, [favorites]);
+
+  const loadData = async () => {
+    try {
+      const [surahsRes, statsRes] = await Promise.all([
+        quranApi.getSurahs(),
+        attemptsApi.getStats().catch(() => ({ stats: null })),
+      ]);
+      setSurahs(surahsRes.surahs);
+      setStats(statsRes.stats);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleFavorite = (surahNumber) => {
+    setFavorites((prev) =>
+      prev.includes(surahNumber)
+        ? prev.filter((n) => n !== surahNumber)
+        : [...prev, surahNumber]
+    );
+  };
+
+  const filteredSurahs = surahs.filter((surah) => {
+    if (showFavoritesOnly && !favorites.includes(surah.number)) {
+      return false;
+    }
+    if (search) {
+      const query = search.toLowerCase();
+      return (
+        surah.name.toLowerCase().includes(query) ||
+        surah.nameAr.includes(search) ||
+        surah.number.toString() === search
+      );
+    }
+    return true;
+  });
+
+  const userName = user?.user_metadata?.name || user?.email?.split('@')[0] || 'Student';
+
+  return (
+    <div className={`min-h-screen ${theme.bg} pb-20`}>
+      {/* Header */}
+      <header className={`${theme.card} px-4 py-6 safe-top`}>
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className={`${theme.textMuted} text-sm`}>Assalamu Alaikum,</p>
+              <h1 className={`text-xl font-bold ${theme.text}`}>{userName}</h1>
             </div>
-          </div>
-        )}
-
-        {/* Recent Attempts */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-white">Recent Attempts</h2>
-            {history.length > 0 && (
-              <button
-                onClick={() => navigate('/history')}
-                className="text-white/50 text-sm hover:text-white/70 transition-colors"
-              >
-                View All
-              </button>
-            )}
+            <button
+              onClick={logout}
+              className={`p-2 ${theme.textMuted} hover:${theme.text} transition-colors`}
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
 
-          {history.length > 0 ? (
-            <div className="space-y-2">
-              {history.slice(0, 3).map((entry) => (
-                <div
-                  key={entry.id}
-                  className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    {entry.status === 'passed' || entry.status === 'approved' ? (
-                      <CheckCircle className="w-6 h-6 text-emerald-400" />
-                    ) : (
-                      <XCircle className="w-6 h-6 text-red-400" />
-                    )}
-                    <div>
-                      <p className="text-white font-medium">{entry.surahName}</p>
-                      <p className="text-white/40 text-xs">
-                        {new Date(entry.date).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  <span className={`text-sm font-medium ${
-                    entry.status === 'passed' || entry.status === 'approved' 
-                      ? 'text-emerald-400' 
-                      : 'text-red-400'
-                  }`}>
-                    {entry.score}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6 text-center">
-              <BookOpen className="w-10 h-10 text-white/20 mx-auto mb-2" />
-              <p className="text-white/40">No recitations yet</p>
-              <p className="text-white/30 text-sm">Start practicing to see your progress</p>
+          {/* Inspirational Quran/Hadith Quote */}
+          <QuranQuoteCard className="mb-4" />
+
+          {/* Stats Grid */}
+          {stats && (
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              <StatsCard
+                icon={Flame}
+                label="Streak"
+                value={`${stats.streakDays}d`}
+                color="bg-orange-500"
+              />
+              <StatsCard
+                icon={Target}
+                label="Accuracy"
+                value={`${stats.averageAccuracy}%`}
+                color="bg-emerald-500"
+              />
+              <StatsCard
+                icon={TrendingUp}
+                label="Total"
+                value={stats.totalAttempts}
+                color="bg-blue-500"
+              />
             </div>
           )}
         </div>
+      </header>
 
-        {/* Inspirational Footer Quote */}
-        <QuranQuote 
-          variant="compact" 
-          className="mt-8"
-        />
-      </div>
+      {/* Main Content */}
+      <main className="px-4 py-6 max-w-lg mx-auto">
+        {/* Search */}
+        <div className="relative mb-4">
+          <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.textMuted}`} />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search surahs..."
+            className={`w-full pl-10 pr-4 py-3 ${theme.card} ${theme.text} ${theme.border} border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500`}
+          />
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setShowFavoritesOnly(false)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              !showFavoritesOnly
+                ? `${theme.primary} text-white`
+                : `${theme.card} ${theme.text}`
+            }`}
+          >
+            All Surahs
+          </button>
+          <button
+            onClick={() => setShowFavoritesOnly(true)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
+              showFavoritesOnly
+                ? `${theme.primary} text-white`
+                : `${theme.card} ${theme.text}`
+            }`}
+          >
+            <Heart className="w-4 h-4" />
+            Favorites
+          </button>
+        </div>
+
+        {/* Surah List */}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full spinner" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredSurahs.map((surah) => (
+              <SurahCard
+                key={surah.number}
+                surah={surah}
+                isFavorite={favorites.includes(surah.number)}
+                onToggleFavorite={toggleFavorite}
+                onClick={() => navigate(`/practice/${surah.number}`)}
+              />
+            ))}
+
+            {filteredSurahs.length === 0 && (
+              <div className={`text-center py-12 ${theme.textMuted}`}>
+                {showFavoritesOnly
+                  ? 'No favorites yet. Tap the heart icon to add some!'
+                  : 'No surahs found'}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      <BottomNav active="home" />
     </div>
   );
 }
