@@ -207,7 +207,7 @@ function PasswordResetModal({ onClose }) {
 }
 
 export default function SettingsPage() {
-  const { theme, themeName, setTheme, availableThemes } = useTheme();
+  const { theme, themeName, setTheme, themes } = useTheme();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -266,19 +266,24 @@ export default function SettingsPage() {
             Theme
           </h3>
           <div className="grid grid-cols-2 gap-3">
-            {availableThemes && availableThemes.map((t) => (
+            {themes && Object.entries(themes).map(([key, t]) => (
               <button
-                key={t.name}
-                onClick={() => setTheme(t.name)}
+                key={key}
+                onClick={() => setTheme(key)}
                 className={`p-3 rounded-lg border-2 transition-all ${
-                  themeName === t.name
-                    ? `${theme.primary} border-current`
+                  themeName === key
+                    ? 'border-blue-500 ring-2 ring-blue-500/30'
                     : `${theme.bg} ${theme.border} border`
                 }`}
               >
-                <span className={themeName === t.name ? 'text-white' : theme.text}>
-                  {t.label || t.name}
-                </span>
+                <div className="flex items-center gap-2">
+                  <div 
+                    className={`w-4 h-4 rounded-full ${t.primary}`}
+                  />
+                  <span className={theme.text}>
+                    {t.name}
+                  </span>
+                </div>
               </button>
             ))}
           </div>
