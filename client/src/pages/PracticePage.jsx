@@ -1,299 +1,419 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
-import { useRecording } from '../hooks/useRecording';
-import { quranApi, transcribeApi, verifyApi, attemptsApi } from '../services/api';
-import { QuranQuoteCard } from '../components/QuranQuote';
-import {
-  ArrowLeft,
-  Mic,
-  Square,
-  RefreshCw,
-  Check,
-  X,
-  Edit3,
-  Send,
+import { 
+  Mic, 
+  Square, 
+  Play, 
+  Pause,
+  CheckCircle,
+  XCircle,
+  ChevronLeft,
   Loader2,
+  RotateCcw,
+  Star,
+  StarOff
 } from 'lucide-react';
+import QuranQuote from '../components/QuranQuote';
 
-function RecordingButton({ isRecording, onStart, onStop, duration, disabled }) {
-  const { theme } = useTheme();
-  return (
-    <div className="flex flex-col items-center">
-      <button
-        onClick={isRecording ? onStop : onStart}
-        disabled={disabled}
-        className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-          disabled ? 'bg-gray-500 cursor-not-allowed' : isRecording ? 'bg-red-500 recording-pulse' : `${theme.primary} ${theme.primaryHover}`
-        }`}
-      >
-        {isRecording ? <Square className="w-8 h-8 text-white fill-white" /> : <Mic className="w-8 h-8 text-white" />}
-      </button>
-      <p className={`mt-3 text-lg font-mono ${theme.text}`}>{duration}</p>
-      <p className={`text-sm ${theme.textMuted}`}>{disabled ? 'Processing...' : isRecording ? 'Tap to stop' : 'Tap to record'}</p>
-    </div>
-  );
-}
+// Sample verses data - in production this would come from API
+const SAMPLE_VERSES = {
+  1: [
+    { number: 1, text: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ' },
+    { number: 2, text: 'الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ' },
+    { number: 3, text: 'الرَّحْمَٰنِ الرَّحِيمِ' },
+    { number: 4, text: 'مَالِكِ يَوْمِ الدِّينِ' },
+    { number: 5, text: 'إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ' },
+    { number: 6, text: 'اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ' },
+    { number: 7, text: 'صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ' },
+  ]
+};
 
-function VerseRangeModal({ surah, onSelect, onClose }) {
-  const { theme } = useTheme();
-  const [start, setStart] = useState(1);
-  const [end, setEnd] = useState(Math.min(7, surah.versesCount));
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4">
-      <div className={`${theme.card} rounded-t-2xl sm:rounded-2xl w-full max-w-md p-6 animate-fade-in`}>
-        <h3 className={`text-lg font-semibold ${theme.text} mb-4`}>Select Verse Range</h3>
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className={`block text-sm ${theme.textMuted} mb-2`}>Start Verse</label>
-            <select value={start} onChange={(e) => { const v = parseInt(e.target.value); setStart(v); if (end < v) setEnd(v); }} className={`w-full p-3 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg`}>
-              {Array.from({ length: surah.versesCount }, (_, i) => i + 1).map((v) => (<option key={v} value={v}>{v}</option>))}
-            </select>
-          </div>
-          <div>
-            <label className={`block text-sm ${theme.textMuted} mb-2`}>End Verse</label>
-            <select value={end} onChange={(e) => setEnd(parseInt(e.target.value))} className={`w-full p-3 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg`}>
-              {Array.from({ length: surah.versesCount - start + 1 }, (_, i) => start + i).map((v) => (<option key={v} value={v}>{v}</option>))}
-            </select>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <button onClick={onClose} className={`flex-1 py-3 ${theme.card} ${theme.border} border rounded-lg ${theme.text}`}>Cancel</button>
-          <button onClick={() => onSelect(start, end)} className={`flex-1 py-3 ${theme.primary} text-white rounded-lg`}>Start Practice</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function VerificationResult({ result, verses, onRetry, onDone }) {
-  const { theme } = useTheme();
-  const isPerfect = result.overallAccuracy === 100;
-  
-  const getAccuracyColor = (accuracy) => { 
-    if (accuracy === 100) return 'text-yellow-400';
-    if (accuracy >= 90) return 'text-emerald-400'; 
-    if (accuracy >= 70) return 'text-yellow-400'; 
-    return 'text-red-400'; 
-  };
-
-  const getIslamicMessage = (accuracy) => {
-    if (accuracy === 100) return { title: "MashaAllah! 🏆", message: "Perfect recitation! May Allah bless your memorization journey." };
-    if (accuracy >= 95) return { title: "Excellent! ⭐", message: "SubhanAllah! You're so close to perfection. Keep going!" };
-    if (accuracy >= 90) return { title: "Great Job! ✨", message: "MashaAllah! Your hard work is showing." };
-    if (accuracy >= 80) return { title: "Well Done! 💪", message: "Alhamdulillah! You're making good progress." };
-    if (accuracy >= 70) return { title: "Good Effort! 📖", message: "Every ayah you learn brings you closer to Allah." };
-    if (accuracy >= 60) return { title: "Keep Going! 🤲", message: "The one who struggles with Quran gets double reward." };
-    return { title: "Don't Give Up! 💚", message: "Allah rewards the effort, not just the result." };
-  };
-
-  const islamicMessage = getIslamicMessage(result.overallAccuracy);
-
-  return (
-    <div className="animate-fade-in">
-      {/* Score */}
-      <div className={`${theme.card} rounded-2xl p-6 mb-4 text-center ${isPerfect ? 'ring-2 ring-yellow-400' : ''}`}>
-        {isPerfect && <div className="text-4xl mb-2">🎉</div>}
-        <div className={`text-5xl font-bold ${getAccuracyColor(result.overallAccuracy)} mb-2`}>{result.overallAccuracy}%</div>
-        <p className={`font-medium ${theme.text}`}>{islamicMessage.title}</p>
-        <p className={`text-sm ${theme.textMuted} mt-1`}>{islamicMessage.message}</p>
-      </div>
-
-      {/* Perfect Score Celebration */}
-      {isPerfect && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-center">
-          <p className="text-yellow-400 font-medium">🌟 Perfect Recitation! 🌟</p>
-          <p className="text-yellow-400/70 text-sm mt-1">You recited every word correctly. May Allah increase your knowledge!</p>
-        </div>
-      )}
-
-      {/* Original Verses - shown only in results */}
-      {verses && verses.length > 0 && (
-        <div className={`${theme.card} rounded-2xl p-4 mb-4`}>
-          <h4 className={`font-medium ${theme.text} mb-3`}>Original Verses:</h4>
-          <div className="arabic-text text-xl leading-loose" dir="rtl">
-            {verses.map((verse) => (<span key={verse.number}>{verse.text}<span className="verse-separator"> ۝ </span></span>))}
-          </div>
-        </div>
-      )}
-
-      {/* Word Analysis */}
-      {result.wordByWord && result.wordByWord.length > 0 && (
-        <div className={`${theme.card} rounded-2xl p-4 mb-4`}>
-          <h4 className={`font-medium ${theme.text} mb-3`}>Word Analysis</h4>
-          <div className="flex flex-wrap gap-2" dir="rtl">
-            {result.wordByWord.map((word, idx) => (
-              <span key={idx} className={`px-2 py-1 rounded text-lg ${word.status === 'correct' ? `${theme.success} bg-emerald-500/10` : word.status === 'incorrect' ? `${theme.error} bg-red-500/10` : `${theme.textMuted} bg-slate-500/10`}`}>
-                {word.original}
-                {word.status === 'correct' && <Check className="inline w-3 h-3 ml-1" />}
-                {word.status === 'incorrect' && <X className="inline w-3 h-3 ml-1" />}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Errors/Mistakes */}
-      {result.errors && result.errors.length > 0 && (
-        <div className={`${theme.card} rounded-2xl p-4 mb-4`}>
-          <h4 className={`font-medium ${theme.text} mb-3`}>Areas to Improve ({result.errors.length})</h4>
-          <div className="space-y-3">
-            {result.errors.slice(0, 5).map((error, idx) => (
-              <div key={idx} className={`pb-3 ${idx < Math.min(result.errors.length, 5) - 1 ? `border-b ${theme.border}` : ''}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-red-400 text-sm">You said:</span>
-                  <span className="arabic-text text-red-400" dir="rtl">{error.recited || '—'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-emerald-400 text-sm">Correct:</span>
-                  <span className="arabic-text text-emerald-400" dir="rtl">{error.original || '—'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Quran Quote Card */}
-      <QuranQuoteCard accuracy={result.overallAccuracy} className="mb-4" />
-
-      {/* Actions */}
-      <div className="flex gap-3">
-        <button onClick={onRetry} className={`flex-1 py-3 ${theme.card} ${theme.border} border rounded-xl ${theme.text} flex items-center justify-center gap-2`}><RefreshCw className="w-5 h-5" />Try Again</button>
-        <button onClick={onDone} className={`flex-1 py-3 ${theme.primary} text-white rounded-xl flex items-center justify-center gap-2`}><Check className="w-5 h-5" />Done</button>
-      </div>
-    </div>
-  );
-}
+const SURAH_INFO = {
+  1: { name: 'Al-Fatihah', nameAr: 'الفاتحة', verses: 7 }
+};
 
 export default function PracticePage() {
   const { surahNumber } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
-  const [surah, setSurah] = useState(null);
-  const [verses, setVerses] = useState([]);
-  const [verseRange, setVerseRange] = useState(null);
-  const [showRangeModal, setShowRangeModal] = useState(true);
-  const [step, setStep] = useState('select');
+
+  // Recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+
+  // Transcription & verification state
   const [transcription, setTranscription] = useState('');
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
 
-  const { isRecording, duration, formattedDuration, audioBlob, startRecording, stopRecording, resetRecording } = useRecording();
+  // Favorites
+  const [isFavorite, setIsFavorite] = useState(false);
 
-  useEffect(() => { loadSurah(); }, [surahNumber]);
+  const surahNum = parseInt(surahNumber) || 1;
+  const surahInfo = SURAH_INFO[surahNum] || { name: `Surah ${surahNum}`, nameAr: `سورة ${surahNum}`, verses: 7 };
+  const verses = SAMPLE_VERSES[surahNum] || [];
 
   useEffect(() => {
-    if (audioBlob && step === 'record') {
-      console.log('Audio blob received, starting transcription...');
-      handleTranscription();
+    // Check if this surah is favorited
+    const favorites = JSON.parse(localStorage.getItem('hifz-favorites') || '[]');
+    setIsFavorite(favorites.includes(surahNum));
+
+    // Cleanup audio URL on unmount
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [surahNum, audioUrl]);
+
+  const toggleFavorite = () => {
+    const favorites = JSON.parse(localStorage.getItem('hifz-favorites') || '[]');
+    if (isFavorite) {
+      const newFavorites = favorites.filter(id => id !== surahNum);
+      localStorage.setItem('hifz-favorites', JSON.stringify(newFavorites));
+    } else {
+      favorites.push(surahNum);
+      localStorage.setItem('hifz-favorites', JSON.stringify(favorites));
     }
-  }, [audioBlob]);
-
-  const loadSurah = async () => {
-    try {
-      const { surah } = await quranApi.getSurah(surahNumber);
-      setSurah(surah);
-    } catch (err) { setError('Failed to load surah'); }
+    setIsFavorite(!isFavorite);
   };
 
-  const loadVerses = async (start, end) => {
-    setLoading(true);
+  const startRecording = async () => {
     try {
-      const { verses: loadedVerses, combinedText } = await quranApi.getVerses(surahNumber, start, end);
-      setVerses(loadedVerses);
-      setVerseRange({ start, end, combinedText });
-      setShowRangeModal(false);
-      setStep('record');
-    } catch (err) { setError('Failed to load verses'); }
-    finally { setLoading(false); }
-  };
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
 
-  const handleTranscription = async () => {
-    if (!audioBlob) return;
-    console.log('Starting transcription...');
-    setStep('transcribe');
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await transcribeApi.transcribe(audioBlob);
-      console.log('Transcription result:', result);
-      setTranscription(result.transcription);
-      setStep('edit');
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        setAudioUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
     } catch (err) {
-      console.error('Transcription error:', err);
-      setError('Transcription failed: ' + err.message);
-      setStep('record');
-    } finally { setLoading(false); }
+      console.error('Failed to start recording:', err);
+      alert('Could not access microphone. Please check permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const playAudio = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleTranscribe = async () => {
+    if (!audioBlob) return;
+
+    setIsTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (data.transcription) {
+        setTranscription(data.transcription);
+      }
+    } catch (err) {
+      console.error('Transcription failed:', err);
+      alert('Transcription failed. Please try again.');
+    } finally {
+      setIsTranscribing(false);
+    }
   };
 
   const handleVerify = async () => {
-    setStep('verify');
-    setLoading(true);
-    setError(null);
+    if (!transcription) return;
+
+    setIsVerifying(true);
     try {
-      const result = await verifyApi.verify(transcription, verseRange.combinedText, parseInt(surahNumber), verseRange);
-      setVerificationResult(result.verification);
-      await attemptsApi.saveAttempt({
-        surahNumber: parseInt(surahNumber), surahName: surah.name, verseStart: verseRange.start, verseEnd: verseRange.end,
-        transcription, originalText: verseRange.combinedText, accuracy: result.verification.overallAccuracy,
-        wordResults: result.verification.wordByWord, errors: result.verification.errors, duration, status: result.verification.isCorrect ? 'passed' : 'needs_review',
+      const response = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcription,
+          surahNumber: surahNum,
+          expectedVerses: verses.map(v => v.text)
+        }),
       });
-      setStep('result');
-    } catch (err) { setError('Verification failed: ' + err.message); setStep('edit'); }
-    finally { setLoading(false); }
+
+      const result = await response.json();
+      setVerificationResult(result);
+
+      // Save to history
+      const history = JSON.parse(localStorage.getItem('hifz-history') || '[]');
+      history.unshift({
+        id: Date.now(),
+        surahNumber: surahNum,
+        surahName: surahInfo.name,
+        date: new Date().toISOString(),
+        status: result.passed ? 'passed' : 'failed',
+        score: result.score || 0,
+        feedback: result.feedback
+      });
+      localStorage.setItem('hifz-history', JSON.stringify(history.slice(0, 100)));
+    } catch (err) {
+      console.error('Verification failed:', err);
+      alert('Verification failed. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
-  const handleRetry = () => { resetRecording(); setTranscription(''); setVerificationResult(null); setError(null); setStep('record'); };
-
-  const handleStopRecording = () => { console.log('Stop recording clicked'); stopRecording(); };
-
-  if (!surah) return <div className={`min-h-screen ${theme.bg} flex items-center justify-center`}><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full spinner" /></div>;
+  const resetAttempt = () => {
+    setAudioBlob(null);
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    setAudioUrl(null);
+    setTranscription('');
+    setVerificationResult(null);
+  };
 
   return (
-    <div className={`min-h-screen ${theme.bg}`}>
-      <header className={`${theme.card} px-4 py-4 sticky top-0 z-10`}>
-        <div className="max-w-lg mx-auto flex items-center gap-4">
-          <button onClick={() => navigate('/')} className={`p-2 ${theme.textMuted}`}><ArrowLeft className="w-5 h-5" /></button>
-          <div className="flex-1">
-            <h1 className={`font-semibold ${theme.text}`}>{surah.name}</h1>
-            <p className={`text-sm ${theme.textMuted}`}>{verseRange ? `Verses ${verseRange.start}-${verseRange.end}` : `${surah.versesCount} verses`}</p>
+    <div className="min-h-screen pb-24">
+      {/* Header */}
+      <div className="bg-black/20 backdrop-blur-lg px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => navigate('/')}
+            className="text-white/70 hover:text-white transition-colors"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+          <div>
+            <h1 
+              className="text-white font-bold text-lg"
+              dir="rtl"
+              style={{ fontFamily: "'Amiri', serif" }}
+            >
+              {surahInfo.nameAr}
+            </h1>
+            <p className="text-white/50 text-xs">{surahInfo.name}</p>
           </div>
-          <span className={`text-2xl ${theme.textMuted}`} dir="rtl">{surah.nameAr}</span>
         </div>
-      </header>
-      {showRangeModal && surah && <VerseRangeModal surah={surah} onSelect={loadVerses} onClose={() => navigate('/')} />}
-      <main className="px-4 py-6 max-w-lg mx-auto">
-        {error && <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}<button onClick={() => setError(null)} className="ml-2 underline">Dismiss</button></div>}
-        
-        {/* VERSES ARE HIDDEN - Only show instruction during recording */}
-        {step === 'record' && (
-          <div className={`${theme.card} rounded-2xl p-6 mb-6 text-center`}>
-            <p className={`text-lg ${theme.text} mb-2`}>🧠 Memorization Test</p>
-            <p className={theme.textMuted}>Recite <strong>Surah {surah.name}</strong></p>
-            <p className={theme.textMuted}>Verses <strong>{verseRange?.start} - {verseRange?.end}</strong></p>
-            <p className={`text-sm ${theme.textMuted} mt-4`}>Verses are hidden. Recite from memory!</p>
+        <button 
+          onClick={toggleFavorite}
+          className="p-2 text-white/70 hover:text-yellow-400 transition-colors"
+        >
+          {isFavorite ? (
+            <Star className="w-6 h-6 fill-yellow-400 text-yellow-400" />
+          ) : (
+            <StarOff className="w-6 h-6" />
+          )}
+        </button>
+      </div>
+
+      <div className="p-4">
+        {/* Encouraging Quote - Before Practice */}
+        {!audioBlob && !verificationResult && (
+          <QuranQuote 
+            variant="compact" 
+            className="mb-4"
+          />
+        )}
+
+        {/* Verses to Recite */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
+          <h2 className="text-white/60 text-sm mb-3">Verses to Recite</h2>
+          <div 
+            className="space-y-2"
+            dir="rtl"
+            style={{ fontFamily: "'Amiri', 'Traditional Arabic', serif" }}
+          >
+            {verses.length > 0 ? (
+              verses.map((verse) => (
+                <p key={verse.number} className="text-xl text-white leading-loose">
+                  {verse.text}
+                  <span className="text-amber-400/60 text-sm mx-1">۝</span>
+                </p>
+              ))
+            ) : (
+              <p className="text-white/40 text-center">Loading verses...</p>
+            )}
+          </div>
+        </div>
+
+        {/* Recording Section */}
+        {!verificationResult && (
+          <div className="text-center mb-6">
+            {!audioBlob ? (
+              <>
+                <button
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={`w-24 h-24 rounded-full flex items-center justify-center transition-all ${
+                    isRecording
+                      ? 'bg-red-500 animate-pulse'
+                      : `bg-gradient-to-br ${theme.accentGradient}`
+                  }`}
+                >
+                  {isRecording ? (
+                    <Square className="w-10 h-10 text-white" />
+                  ) : (
+                    <Mic className="w-10 h-10 text-white" />
+                  )}
+                </button>
+                <p className="text-white/60 mt-3">
+                  {isRecording ? 'Recording... Tap to stop' : 'Tap to start recording'}
+                </p>
+              </>
+            ) : (
+              <div className="space-y-4">
+                {/* Audio Playback */}
+                <div className="bg-white/10 rounded-xl p-4 flex items-center gap-4">
+                  <button
+                    onClick={playAudio}
+                    className={`w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br ${theme.accentGradient}`}
+                  >
+                    {isPlaying ? (
+                      <Pause className="w-5 h-5 text-white" />
+                    ) : (
+                      <Play className="w-5 h-5 text-white ml-1" />
+                    )}
+                  </button>
+                  <div className="flex-1">
+                    <p className="text-white font-medium">Recording Complete</p>
+                    <p className="text-white/50 text-sm">Tap play to review</p>
+                  </div>
+                  <button
+                    onClick={resetAttempt}
+                    className="p-2 text-white/50 hover:text-white transition-colors"
+                  >
+                    <RotateCcw className="w-5 h-5" />
+                  </button>
+                </div>
+                <audio ref={audioRef} src={audioUrl} onEnded={() => setIsPlaying(false)} />
+
+                {/* Transcribe Button */}
+                {!transcription && (
+                  <button
+                    onClick={handleTranscribe}
+                    disabled={isTranscribing}
+                    className={`w-full py-4 bg-gradient-to-r ${theme.accentGradient} text-white font-semibold rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2`}
+                  >
+                    {isTranscribing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Transcribing...
+                      </>
+                    ) : (
+                      'Transcribe Recording'
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
-        
-        {step === 'record' && <div className="text-center py-8"><RecordingButton isRecording={isRecording} onStart={startRecording} onStop={handleStopRecording} duration={formattedDuration} disabled={loading} /></div>}
-        {step === 'transcribe' && <div className="text-center py-12"><Loader2 className={`w-12 h-12 ${theme.accent} mx-auto spinner mb-4`} /><p className={theme.text}>Transcribing your recitation...</p><p className={`text-sm ${theme.textMuted} mt-2`}>This may take a moment</p></div>}
-        {step === 'edit' && (
-          <div className="animate-fade-in">
-            <div className={`${theme.card} rounded-2xl p-4 mb-4`}>
-              <div className="flex items-center justify-between mb-3"><h3 className={`font-medium ${theme.text}`}>Your Transcription</h3><Edit3 className={`w-4 h-4 ${theme.textMuted}`} /></div>
-              <textarea value={transcription} onChange={(e) => setTranscription(e.target.value)} className={`w-full h-32 p-3 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg resize-none arabic-text text-xl`} dir="rtl" placeholder="Edit transcription if needed..." />
+
+        {/* Transcription Result */}
+        {transcription && !verificationResult && (
+          <div className="mb-6">
+            <h3 className="text-white/60 text-sm mb-2">Transcription</h3>
+            <div 
+              className="bg-white/5 border border-white/10 rounded-xl p-4"
+              dir="rtl"
+              style={{ fontFamily: "'Amiri', serif" }}
+            >
+              <p className="text-xl text-white leading-loose">{transcription}</p>
             </div>
-            <div className="flex gap-3">
-              <button onClick={handleRetry} className={`flex-1 py-3 ${theme.card} ${theme.border} border rounded-xl ${theme.text}`}>Re-record</button>
-              <button onClick={handleVerify} disabled={!transcription.trim()} className={`flex-1 py-3 ${theme.primary} text-white rounded-xl flex items-center justify-center gap-2 disabled:opacity-50`}><Send className="w-5 h-5" />Verify</button>
-            </div>
+            <button
+              onClick={handleVerify}
+              disabled={isVerifying}
+              className={`w-full mt-4 py-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2`}
+            >
+              {isVerifying ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                'Verify Recitation'
+              )}
+            </button>
           </div>
         )}
-        {step === 'verify' && <div className="text-center py-12"><Loader2 className={`w-12 h-12 ${theme.accent} mx-auto spinner mb-4`} /><p className={theme.text}>Verifying your recitation...</p></div>}
-        {step === 'result' && verificationResult && <VerificationResult result={verificationResult} verses={verses} onRetry={handleRetry} onDone={() => navigate('/')} />}
-      </main>
+
+        {/* Verification Result */}
+        {verificationResult && (
+          <div className="space-y-4">
+            <div className={`rounded-2xl p-6 text-center ${
+              verificationResult.passed 
+                ? 'bg-emerald-500/20 border border-emerald-500/40' 
+                : 'bg-red-500/20 border border-red-500/40'
+            }`}>
+              {verificationResult.passed ? (
+                <CheckCircle className="w-16 h-16 text-emerald-400 mx-auto mb-3" />
+              ) : (
+                <XCircle className="w-16 h-16 text-red-400 mx-auto mb-3" />
+              )}
+              <h2 className={`text-2xl font-bold mb-1 ${
+                verificationResult.passed ? 'text-emerald-400' : 'text-red-400'
+              }`}>
+                {verificationResult.passed ? 'Excellent!' : 'Keep Practicing'}
+              </h2>
+              <p className="text-white/70">
+                Score: {verificationResult.score}%
+              </p>
+            </div>
+
+            {verificationResult.feedback && (
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <h3 className="text-white/60 text-sm mb-2">Feedback</h3>
+                <p className="text-white/80">{verificationResult.feedback}</p>
+              </div>
+            )}
+
+            {/* Encouraging Quote after result */}
+            <QuranQuote 
+              variant="default" 
+              showRefresh={true}
+              className="mt-4"
+            />
+
+            <button
+              onClick={resetAttempt}
+              className={`w-full py-4 bg-gradient-to-r ${theme.accentGradient} text-white font-semibold rounded-xl shadow-lg`}
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
