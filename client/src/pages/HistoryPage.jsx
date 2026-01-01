@@ -141,6 +141,7 @@ function BottomNav({ active }) {
 function AttemptCard({ attempt, onDelete, onClick }) {
   const { theme } = useTheme();
   const isPerfect = attempt.accuracy === 100;
+  const hasErrors = attempt.accuracy < 100;
   const isPassed = attempt.status === 'passed' || attempt.accuracy >= 85;
 
   const formatDate = (dateString) => {
@@ -160,30 +161,35 @@ function AttemptCard({ attempt, onDelete, onClick }) {
   };
 
   const getAccuracyColor = (accuracy) => {
-    if (accuracy === 100) return 'text-yellow-400';
-    if (accuracy >= 90) return 'text-emerald-400';
-    if (accuracy >= 70) return 'text-yellow-400';
+    if (accuracy === 100) return 'text-emerald-400';
     return 'text-red-400';
+  };
+
+  // Card border style based on accuracy
+  const getCardBorderStyle = () => {
+    if (isPerfect) {
+      return 'ring-2 ring-emerald-500/60 bg-emerald-500/5';
+    } else {
+      return 'ring-2 ring-red-500/40 bg-red-500/5';
+    }
   };
 
   return (
     <div
-      className={`${theme.card} rounded-xl p-4 transition-colors cursor-pointer ${theme.cardHover} ${isPerfect ? 'ring-2 ring-yellow-400/50' : ''}`}
+      className={`${theme.card} rounded-xl p-4 transition-colors cursor-pointer ${theme.cardHover} ${getCardBorderStyle()}`}
       onClick={onClick}
     >
       <div className="flex items-start gap-3">
         {/* Status Icon */}
         <div
           className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-            isPerfect ? 'bg-yellow-500/20' : isPassed ? 'bg-emerald-500/20' : 'bg-yellow-500/20'
+            isPerfect ? 'bg-emerald-500/20' : 'bg-red-500/20'
           }`}
         >
           {isPerfect ? (
-            <Award className="w-5 h-5 text-yellow-400" />
-          ) : isPassed ? (
             <CheckCircle className="w-5 h-5 text-emerald-400" />
           ) : (
-            <AlertCircle className="w-5 h-5 text-yellow-400" />
+            <AlertCircle className="w-5 h-5 text-red-400" />
           )}
         </div>
 
@@ -192,7 +198,7 @@ function AttemptCard({ attempt, onDelete, onClick }) {
           <div className="flex items-center justify-between">
             <h3 className={`font-semibold ${theme.text}`}>{attempt.surah_name}</h3>
             <div className="flex items-center gap-1">
-              {isPerfect && <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />}
+              {isPerfect && <Star className="w-4 h-4 text-emerald-400 fill-emerald-400" />}
               <span className={`font-bold ${getAccuracyColor(attempt.accuracy)}`}>
                 {attempt.accuracy}%
               </span>
