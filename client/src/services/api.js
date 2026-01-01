@@ -1,330 +1,170 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
-import { authApi } from '../services/api';
-import {
-  ArrowLeft,
-  Moon,
-  Sun,
-  LogOut,
-  User,
-  Bell,
-  Shield,
-  HelpCircle,
-  ChevronRight,
-  Clock,
-  BookOpen,
-  Settings,
-  Key,
-  Eye,
-  EyeOff,
-  Loader2,
-  Check,
-} from 'lucide-react';
+const API_BASE = '/api';
 
-// Bottom nav (shared component)
-function BottomNav({ active }) {
-  const { theme } = useTheme();
-  const navigate = useNavigate();
+// Helper to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
-  const tabs = [
-    { id: 'home', icon: BookOpen, label: 'Surahs', path: '/' },
-    { id: 'history', icon: Clock, label: 'History', path: '/history' },
-    { id: 'settings', icon: Settings, label: 'Settings', path: '/settings' },
-  ];
+// Generic fetch wrapper with error handling
+async function apiFetch(endpoint, options = {}) {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+      ...options.headers,
+    },
+  });
 
-  return (
-    <nav className={`fixed bottom-0 left-0 right-0 ${theme.card} border-t ${theme.border} safe-bottom`}>
-      <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => navigate(tab.path)}
-            className={`flex flex-col items-center justify-center w-full h-full transition-colors ${
-              active === tab.id ? theme.accent : theme.textMuted
-            }`}
-          >
-            <tab.icon className="w-5 h-5" />
-            <span className="text-xs mt-1">{tab.label}</span>
-          </button>
-        ))}
-      </div>
-    </nav>
-  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || error.message || 'Request failed');
+  }
+
+  return response.json();
 }
 
-// Password Reset Modal
-function PasswordResetModal({ onClose }) {
-  const { theme } = useTheme();
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+// Auth API
+export const authApi = {
+  login: (email, password) =>
+    apiFetch('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+  signup: (email, password, name, role = 'student') =>
+    apiFetch('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, name, role }),
+    }),
 
-    // Validation
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setError('All fields are required');
-      return;
+  logout: () => apiFetch('/auth/logout', { method: 'POST' }),
+
+  getMe: () => apiFetch('/auth/me'),
+
+  changePassword: (currentPassword, newPassword) =>
+    apiFetch('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+};
+
+// Transcription API
+export const transcribeApi = {
+  transcribe: async (audioBlob) => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+
+    const response = await fetch(`${API_BASE}/transcribe`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Transcription failed' }));
+      throw new Error(error.error || 'Transcription failed');
     }
 
-    if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters');
-      return;
+    return response.json();
+  },
+};
+
+// Verification API
+export const verifyApi = {
+  verify: (transcription, originalText, surahNumber, verseRange) =>
+    apiFetch('/verify', {
+      method: 'POST',
+      body: JSON.stringify({ transcription, originalText, surahNumber, verseRange }),
+    }),
+
+  quickVerify: (transcription, originalText) =>
+    apiFetch('/verify/quick', {
+      method: 'POST',
+      body: JSON.stringify({ transcription, originalText }),
+    }),
+};
+
+// Quran API
+export const quranApi = {
+  getSurahs: () => apiFetch('/quran/surahs'),
+
+  getSurah: (number) => apiFetch(`/quran/surahs/${number}`),
+
+  getVerses: (surahNumber, start, end) => {
+    let url = `/quran/surahs/${surahNumber}/verses`;
+    if (start && end) {
+      url += `?start=${start}&end=${end}`;
+    }
+    return apiFetch(url);
+  },
+
+  getJuz: () => apiFetch('/quran/juz'),
+
+  searchSurahs: (query) => apiFetch(`/quran/search?q=${encodeURIComponent(query)}`),
+};
+
+// Attempts API
+export const attemptsApi = {
+  getAttempts: (limit = 20, offset = 0, surah = null) => {
+    let url = `/attempts?limit=${limit}&offset=${offset}`;
+    if (surah) url += `&surah=${surah}`;
+    return apiFetch(url);
+  },
+
+  saveAttempt: (attempt) =>
+    apiFetch('/attempts', {
+      method: 'POST',
+      body: JSON.stringify(attempt),
+    }),
+
+  getAttempt: (id) => apiFetch(`/attempts/${id}`),
+
+  deleteAttempt: (id) => apiFetch(`/attempts/${id}`, { method: 'DELETE' }),
+
+  getStats: () => apiFetch('/attempts/stats/summary'),
+};
+
+// Audio API
+export const audioApi = {
+  uploadAudio: async (audioBlob, attemptId = null) => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+    if (attemptId) {
+      formData.append('attemptId', attemptId);
     }
 
-    if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
-      return;
+    const response = await fetch(`${API_BASE}/audio/upload`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(error.error || 'Failed to upload audio');
     }
 
-    setLoading(true);
-    try {
-      await authApi.changePassword(currentPassword, newPassword);
-      setSuccess(true);
-      setTimeout(() => {
-        onClose();
-      }, 2000);
-    } catch (err) {
-      setError(err.message || 'Failed to change password');
-    } finally {
-      setLoading(false);
-    }
-  };
+    return response.json();
+  },
 
-  return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className={`${theme.card} rounded-2xl w-full max-w-md p-6 animate-fade-in`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className={`text-xl font-bold ${theme.text} mb-4 flex items-center gap-2`}>
-          <Key className="w-5 h-5" />
-          Change Password
-        </h2>
+  getAudioUrl: (key) => apiFetch(`/audio/${encodeURIComponent(key)}`),
 
-        {success ? (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Check className="w-8 h-8 text-emerald-400" />
-            </div>
-            <p className={`text-lg font-medium ${theme.text}`}>Password Changed!</p>
-            <p className={`text-sm ${theme.textMuted} mt-1`}>Your password has been updated successfully.</p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                {error}
-              </div>
-            )}
+  deleteAudio: (key) => apiFetch(`/audio/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 
-            {/* Current Password */}
-            <div>
-              <label className={`block text-sm font-medium ${theme.textMuted} mb-2`}>
-                Current Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showCurrentPassword ? 'text' : 'password'}
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className={`w-full p-3 pr-10 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg`}
-                  placeholder="Enter current password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`}
-                >
-                  {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
+  reTranscribe: (audioKey) =>
+    apiFetch('/audio/retranscribe', {
+      method: 'POST',
+      body: JSON.stringify({ audioKey }),
+    }),
+};
 
-            {/* New Password */}
-            <div>
-              <label className={`block text-sm font-medium ${theme.textMuted} mb-2`}>
-                New Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showNewPassword ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className={`w-full p-3 pr-10 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg`}
-                  placeholder="Enter new password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword(!showNewPassword)}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`}
-                >
-                  {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Confirm New Password */}
-            <div>
-              <label className={`block text-sm font-medium ${theme.textMuted} mb-2`}>
-                Confirm New Password
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full p-3 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg`}
-                placeholder="Confirm new password"
-              />
-            </div>
-
-            {/* Buttons */}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className={`flex-1 py-3 ${theme.bg} ${theme.border} border rounded-lg ${theme.text}`}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className={`flex-1 py-3 ${theme.primary} text-white rounded-lg flex items-center justify-center gap-2 disabled:opacity-50`}
-              >
-                {loading ? (
-                  <Loader2 className="w-5 h-5 spinner" />
-                ) : (
-                  'Change Password'
-                )}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export default function SettingsPage() {
-  const { theme, themeName, setTheme, availableThemes } = useTheme();
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-
-  const handleLogout = () => {
-    if (confirm('Are you sure you want to logout?')) {
-      logout();
-      navigate('/login');
-    }
-  };
-
-  return (
-    <div className={`min-h-screen ${theme.bg} pb-20`}>
-      {/* Header */}
-      <header className={`${theme.card} px-4 py-6 safe-top`}>
-        <div className="max-w-lg mx-auto">
-          <h1 className={`text-xl font-bold ${theme.text}`}>Settings</h1>
-        </div>
-      </header>
-
-      <main className="px-4 py-6 max-w-lg mx-auto space-y-6">
-        {/* User Profile */}
-        <div className={`${theme.card} rounded-xl p-4`}>
-          <div className="flex items-center gap-4">
-            <div className={`w-14 h-14 rounded-full ${theme.primary} flex items-center justify-center`}>
-              <User className="w-7 h-7 text-white" />
-            </div>
-            <div>
-              <h2 className={`font-semibold ${theme.text}`}>{user?.name || 'Student'}</h2>
-              <p className={`text-sm ${theme.textMuted}`}>{user?.email || 'No email'}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Account Settings */}
-        <div className={`${theme.card} rounded-xl p-4`}>
-          <h3 className={`font-semibold ${theme.text} mb-4 flex items-center gap-2`}>
-            <Shield className="w-5 h-5" />
-            Account
-          </h3>
-          <button
-            onClick={() => setShowPasswordModal(true)}
-            className={`w-full flex items-center justify-between p-3 ${theme.bg} rounded-lg ${theme.text} hover:opacity-80 transition-opacity`}
-          >
-            <div className="flex items-center gap-3">
-              <Key className="w-5 h-5" />
-              <span>Change Password</span>
-            </div>
-            <ChevronRight className={`w-5 h-5 ${theme.textMuted}`} />
-          </button>
-        </div>
-
-        {/* Theme Selection */}
-        <div className={`${theme.card} rounded-xl p-4`}>
-          <h3 className={`font-semibold ${theme.text} mb-4 flex items-center gap-2`}>
-            <Moon className="w-5 h-5" />
-            Theme
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            {availableThemes && availableThemes.map((t) => (
-              <button
-                key={t.name}
-                onClick={() => setTheme(t.name)}
-                className={`p-3 rounded-lg border-2 transition-all ${
-                  themeName === t.name
-                    ? `${theme.primary} border-current`
-                    : `${theme.bg} ${theme.border} border`
-                }`}
-              >
-                <span className={themeName === t.name ? 'text-white' : theme.text}>
-                  {t.label || t.name}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* App Info */}
-        <div className={`${theme.card} rounded-xl p-4`}>
-          <h3 className={`font-semibold ${theme.text} mb-4 flex items-center gap-2`}>
-            <HelpCircle className="w-5 h-5" />
-            About
-          </h3>
-          <div className={`text-sm ${theme.textMuted} space-y-2`}>
-            <p>Hifz Helper v1.0.0</p>
-            <p>Your companion for Quran memorization</p>
-          </div>
-        </div>
-
-        {/* Logout Button */}
-        <button
-          onClick={handleLogout}
-          className="w-full py-3 bg-red-500/10 text-red-400 rounded-xl flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors"
-        >
-          <LogOut className="w-5 h-5" />
-          Logout
-        </button>
-      </main>
-
-      {/* Password Reset Modal */}
-      {showPasswordModal && (
-        <PasswordResetModal onClose={() => setShowPasswordModal(false)} />
-      )}
-
-      <BottomNav active="settings" />
-    </div>
-  );
-}
+export default {
+  auth: authApi,
+  transcribe: transcribeApi,
+  verify: verifyApi,
+  quran: quranApi,
+  attempts: attemptsApi,
+  audio: audioApi,
+};
