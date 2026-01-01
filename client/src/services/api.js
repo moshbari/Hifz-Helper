@@ -146,6 +146,12 @@ export const audioApi = {
   getAudioUrl: (key) => apiFetch(`/audio/${encodeURIComponent(key)}`),
 
   deleteAudio: (key) => apiFetch(`/audio/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
+  reTranscribe: (audioKey) =>
+    apiFetch('/audio/retranscribe', {
+      method: 'POST',
+      body: JSON.stringify({ audioKey }),
+    }),
 };
 
 export default {
