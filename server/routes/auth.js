@@ -16,7 +16,6 @@ router.post('/signup', async (req, res) => {
     }
 
     if (!isSupabaseConfigured()) {
-      // Development mode: return mock success
       return res.json({
         success: true,
         user: { id: 'dev-user', email, name, role },
@@ -60,7 +59,6 @@ router.post('/login', async (req, res) => {
     }
 
     if (!isSupabaseConfigured()) {
-      // Development mode: return mock session
       return res.json({
         success: true,
         user: { 
@@ -148,6 +146,68 @@ router.get('/me', async (req, res) => {
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+/**
+ * POST /api/auth/change-password
+ * Change user's password
+ */
+router.post('/change-password', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    if (!isSupabaseConfigured()) {
+      return res.json({ success: true, message: 'Password changed (dev mode)' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    
+    if (userError || !user) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // Verify current password by trying to sign in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    // Update password using admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      user.id,
+      { password: newPassword }
+    );
+
+    if (updateError) {
+      return res.status(400).json({ error: updateError.message });
+    }
+
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
   }
 });
 
