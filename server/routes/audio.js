@@ -23,16 +23,13 @@ router.post('/upload', requireAuth, upload.single('audio'), async (req, res) => 
     if (!req.file) {
       return res.status(400).json({ error: 'No audio file provided' });
     }
-
     const { attemptId } = req.body;
     const userId = req.user.id;
     
     // Generate unique filename
     const timestamp = Date.now();
     const filename = `${userId}_${attemptId || timestamp}_${timestamp}.webm`;
-
     const result = await uploadAudio(req.file.buffer, filename, req.file.mimetype);
-
     res.json({
       success: true,
       key: result.key,
@@ -48,14 +45,13 @@ router.post('/upload', requireAuth, upload.single('audio'), async (req, res) => 
  * GET /api/audio/:key
  * Get signed URL for audio playback
  */
-router.get('/:key(*)', authenticateToken, async (req, res) => {
+router.get('/:key(*)', requireAuth, async (req, res) => {
   try {
     const key = req.params.key;
     
     if (!key) {
       return res.status(400).json({ error: 'Audio key required' });
     }
-
     const signedUrl = await getAudioUrl(key);
     
     res.json({
@@ -72,7 +68,7 @@ router.get('/:key(*)', authenticateToken, async (req, res) => {
  * DELETE /api/audio/:key
  * Delete audio recording
  */
-router.delete('/:key(*)', authenticateToken, async (req, res) => {
+router.delete('/:key(*)', requireAuth, async (req, res) => {
   try {
     const key = req.params.key;
     
@@ -93,13 +89,8 @@ router.delete('/:key(*)', authenticateToken, async (req, res) => {
  * Manually trigger cleanup of old recordings (admin only)
  * In production, run this as a scheduled cron job
  */
-router.post('/cleanup', authenticateToken, async (req, res) => {
+router.post('/cleanup', requireAuth, async (req, res) => {
   try {
-    // Optional: Add admin check here
-    // if (req.user.role !== 'admin') {
-    //   return res.status(403).json({ error: 'Admin access required' });
-    // }
-
     const deletedKeys = await cleanupOldRecordings();
     
     res.json({
