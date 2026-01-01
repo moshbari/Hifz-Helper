@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, THEMES } from '../context/ThemeContext';
@@ -9,9 +9,12 @@ import {
   Palette,
   LogOut,
   User,
-  Mail,
-  Shield,
+  Lock,
   Check,
+  X,
+  Loader2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 // Bottom nav
@@ -90,6 +93,180 @@ function ThemeSelector() {
   );
 }
 
+// Change Password Modal
+function ChangePasswordModal({ onClose }) {
+  const { theme } = useTheme();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    // Validation
+    if (newPassword.length < 6) {
+      setError('New password must be at least 6 characters');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('New passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to change password');
+      }
+
+      setSuccess(true);
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className={`${theme.card} rounded-2xl w-full max-w-md p-6 animate-fade-in`}>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className={`text-lg font-semibold ${theme.text}`}>Change Password</h3>
+          <button onClick={onClose} className={theme.textMuted}>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {success ? (
+          <div className="text-center py-8">
+            <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Check className="w-8 h-8 text-emerald-400" />
+            </div>
+            <p className={`${theme.text} font-medium`}>Password Changed!</p>
+            <p className={`${theme.textMuted} text-sm mt-1`}>Your password has been updated successfully.</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+
+            <div>
+              <label className={`block text-sm ${theme.textMuted} mb-1`}>Current Password</label>
+              <div className="relative">
+                <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.textMuted}`} />
+                <input
+                  type={showCurrent ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className={`w-full pl-10 pr-10 py-3 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrent(!showCurrent)}
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`}
+                >
+                  {showCurrent ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className={`block text-sm ${theme.textMuted} mb-1`}>New Password</label>
+              <div className="relative">
+                <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.textMuted}`} />
+                <input
+                  type={showNew ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className={`w-full pl-10 pr-10 py-3 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  required
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNew(!showNew)}
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`}
+                >
+                  {showNew ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className={`block text-sm ${theme.textMuted} mb-1`}>Confirm New Password</label>
+              <div className="relative">
+                <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${theme.textMuted}`} />
+                <input
+                  type={showConfirm ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`w-full pl-10 pr-10 py-3 ${theme.bg} ${theme.text} ${theme.border} border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(!showConfirm)}
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`}
+                >
+                  {showConfirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className={`flex-1 py-3 ${theme.card} ${theme.border} border rounded-lg ${theme.text}`}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className={`flex-1 py-3 ${theme.primary} text-white rounded-lg flex items-center justify-center gap-2 disabled:opacity-50`}
+              >
+                {loading ? <Loader2 className="w-5 h-5 spinner" /> : 'Update Password'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Settings section
 function SettingsSection({ title, children }) {
   const { theme } = useTheme();
@@ -122,6 +299,7 @@ export default function SettingsPage() {
   const { user, logout } = useAuth();
   const { theme } = useTheme();
   const navigate = useNavigate();
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const handleLogout = async () => {
     if (confirm('Are you sure you want to sign out?')) {
@@ -174,10 +352,19 @@ export default function SettingsPage() {
           <ThemeSelector />
         </SettingsSection>
 
+        {/* Security Section */}
+        <SettingsSection title="Security">
+          <SettingsRow
+            icon={Lock}
+            label="Change Password"
+            onClick={() => setShowPasswordModal(true)}
+          />
+        </SettingsSection>
+
         {/* App Section */}
         <SettingsSection title="App">
           <SettingsRow
-            icon={Shield}
+            icon={Settings}
             label="Clear Local Data"
             onClick={handleClearData}
           />
@@ -199,6 +386,11 @@ export default function SettingsPage() {
           <p className="mt-1">Made with ❤️ for Quran memorization</p>
         </div>
       </main>
+
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
+      )}
 
       <BottomNav active="settings" />
     </div>
